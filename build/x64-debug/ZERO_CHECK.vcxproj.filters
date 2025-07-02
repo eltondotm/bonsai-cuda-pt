@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\elton\dev\bonsai-cuda-pt\build\x64-debug\CMakeFiles\36e8597de749968b6695dd23617670ac\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{60F53B5A-7785-3719-9BE4-B6728018CDD9}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

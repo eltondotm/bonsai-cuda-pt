@@ -1,0 +1,10 @@
+^C:\USERS\ELTON\DEV\BONSAI-CUDA-PT\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/elton/dev/bonsai-cuda-pt -BC:/Users/elton/dev/bonsai-cuda-pt/build/x64-debug --check-stamp-file C:/Users/elton/dev/bonsai-cuda-pt/build/x64-debug/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
