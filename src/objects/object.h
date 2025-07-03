@@ -33,12 +33,12 @@ public:
         }, underlying);
     }
 
-    __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const {
-        return cuda::std::visit(overloaded{
-            [&r, &rec](const auto& o) { return o.hit(r, rec); }
-        }, underlying);
-    }
+    // __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const {
+    //     return cuda::std::visit(overloaded{
+    //         [&r, &rec](const auto& o) { return o.hit(r, rec); }
+    //     }, underlying);
+    // }
     
-private:
+//private:
     cuda::std::variant<Sphere, List<Object>, BVH<Object>> underlying;
 };

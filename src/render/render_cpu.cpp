@@ -5,9 +5,9 @@
 #include "camera.h"
 #include "object.h"
 
-glm::vec3 trace_ray(const Ray& r, Object *obj);
+glm::vec3 trace_ray(const Ray& r, BVH<Object> *obj);
 
-void render_cpu(int sx, int sy, glm::vec3 *out, Camera *cam, Object *obj) {
+void render_cpu(int sx, int sy, glm::vec3 *out, Camera *cam, BVH<Object> *obj) {
     for (int j = 0; j < sy; ++j) {
         for (int i = 0; i < sx; ++i) {
             int pixel_index = j*sx + i;

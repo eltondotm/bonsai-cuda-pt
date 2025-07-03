@@ -8,7 +8,7 @@
 #include "ray.h"
 #include "object.h"
 
-__host__ __device__ glm::vec3 trace_ray(const Ray& r, Object *obj) {
+__host__ __device__ glm::vec3 trace_ray(const Ray& r, BVH<Object> *obj) {
     glm::vec3 light_dir = glm::normalize(glm::vec3(-0.4f, -0.6f, -1.f));
 
     HitRecord rec;

@@ -5,6 +5,7 @@
 
 #include "bounds.h"
 #include "hit_record.h"
+#include "sphere.h"
 
 // Binary tree node for use in traversal
 struct alignas(32) BVHNode {
@@ -36,31 +37,43 @@ public:
         int dir_sign[3] = {int(inv_dir.x < 0), int(inv_dir.y < 0), int(inv_dir.z < 0)};
 
         int to_visit[64];      // Stack of nodes waiting to be checked
+        BVHNode *roots[64];    // Stack of roots that ^ indexes.
         int to_visit_idx = 0;  // Current position in the stack
         int node_idx = 0;      // Index of the BVH node to check
+        BVHNode *root = this->bvh; // BVHNode list to check.
 
         while (true) {
-            const BVHNode *node = &bvh[node_idx];
+            const BVHNode *node = &root[node_idx];
             if (node->bbox.intersect(r, inv_dir, dir_sign)) {
                 // Intersection with bounds, check node
                 if (node->num_hitables > 0) {
                     // Leaf node, intersect with hitables
+                    to_visit_idx--;
                     for (int i = 0; i < node->num_hitables; ++i) {
-                        if (prims[node->start_idx + i].hit(r, rec)) {
-                            hit = true;
+                        const Primitive &prim = prims[node->start_idx + i];
+                        if (const BVH<Primitive> *tree = cuda::std::get_if<BVH<Primitive>>(&(prim.underlying))) {
+                            roots[++to_visit_idx] = tree->bvh;
+                            to_visit[to_visit_idx] = 0;
+                        } else if (const Sphere *sphere = cuda::std::get_if<Sphere>(&(prim.underlying))) {
+                            hit |= sphere->hit(r, rec);
+                        } else {
+                            // throw error
                         }
                     }
                     // No intersection, move on to next node
-                    if (to_visit_idx == 0)
+                    if (to_visit_idx <= 0)
                         break;  // Stack has been exhausted
-                    node_idx = to_visit[--to_visit_idx];
+                    node_idx = to_visit[to_visit_idx];
+                    root = roots[to_visit_idx];
                 } else {
                     // Interior node, traverse to near node and put far on the stack
                     //printf("Second child idx: %d\n", node->one_idx);
                     if (dir_sign[node->axis]) {
+                        roots[to_visit_idx] = root;
                         to_visit[to_visit_idx++] = node_idx + 1;
                         node_idx = node->one_idx;
                     } else {
+                        roots[to_visit_idx] = root;
                         to_visit[to_visit_idx++] = node->one_idx;
                         node_idx = node_idx + 1;
                     }
@@ -69,6 +82,7 @@ public:
                 if (to_visit_idx == 0)
                     break;
                 node_idx = to_visit[--to_visit_idx];
+                root = roots[to_visit_idx];
             }
         }
         return hit; 

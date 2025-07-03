@@ -14,8 +14,8 @@
 #define GPU
 #define CPU
 
-void render    (int sx, int sy, glm::vec3 *out, Camera *cam, Object *obj);
-void render_cpu(int sx, int sy, glm::vec3 *out, Camera *cam, Object *obj);
+void render    (int sx, int sy, glm::vec3 *out, Camera *cam, BVH<Object> *obj);
+void render_cpu(int sx, int sy, glm::vec3 *out, Camera *cam, BVH<Object> *obj);
 
 int main(void) {
     int nx = 1280;
@@ -62,14 +62,14 @@ int main(void) {
     checkCudaErrors(cudaMallocManaged((void **)&lst, n_bytes_obj));
     checkCudaErrors(cudaMemcpy(lst, prm_vec.data(), n_bytes_obj, cudaMemcpyHostToDevice));
 
-    Object *obj;
-    checkCudaErrors(cudaMallocManaged((void **)&obj, sizeof(Object)));
-    *obj = Object(BVH<Object>(prm, prm_vec.size(), bvh));
+    BVH<Object> *obj;
+    checkCudaErrors(cudaMallocManaged((void **)&obj, sizeof(BVH<Object>)));
+    *obj = BVH<Object>(prm, prm_vec.size(), bvh);
 
     #ifdef GPU 
     {
         // Band-aid fix -- recursion caused stack overflow
-        cudaDeviceSetLimit(cudaLimitStackSize, 4096);
+        //cudaDeviceSetLimit(cudaLimitStackSize, 4096);
 
         clock_t t = clock();
         std::cout << "Rendering on GPU... ";
