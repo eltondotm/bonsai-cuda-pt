@@ -9,6 +9,7 @@
 #include "bounds.h"
 #include "hit_record.h"
 #include "sphere.h"
+#include "triangle.h"
 #include "object_list.h"
 #include "bvh.h"
 
@@ -19,6 +20,9 @@ class Object {
 public:
     __host__ __device__ Object(Sphere&& sphere)
         : underlying(cuda::std::move(sphere)) {
+    }
+    __host__ __device__ Object(Triangle&& tri)
+        : underlying(cuda::std::move(tri)) {  
     }
     __host__ __device__ Object(List<Object>&& list)
         : underlying(cuda::std::move(list)) {
@@ -33,12 +37,11 @@ public:
         }, underlying);
     }
 
-    // __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const {
-    //     return cuda::std::visit(overloaded{
-    //         [&r, &rec](const auto& o) { return o.hit(r, rec); }
-    //     }, underlying);
-    // }
+    __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const {
+        return cuda::std::visit(overloaded{
+            [&r, &rec](const auto& o) { return o.hit(r, rec); }
+        }, underlying);
+    }
     
-//private:
-    cuda::std::variant<Sphere, List<Object>, BVH<Object>> underlying;
+    cuda::std::variant<Sphere, Triangle, List<Object>, BVH<Object>> underlying;
 };

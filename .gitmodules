@@ -1,0 +1,3 @@
+[submodule "ext/miniScene"]
+	path = ext/miniScene
+	url = https://github.com/ingowald/miniScene.git

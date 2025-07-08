@@ -12,15 +12,13 @@ class Sphere {
 public:
     __host__ __device__ Sphere() 
         : radius(1.f), center(0.f) { 
-        bbox = Bounds(glm::vec3(-radius) + center, glm::vec3(radius) + center); 
     }
     __host__ __device__ Sphere(float _radius, const glm::vec3& _center) 
         : radius(_radius), center(_center) {
-        bbox = Bounds(glm::vec3(-radius) + center, glm::vec3(radius) + center);
     }
 
     __host__ __device__ Bounds bounds() const { 
-        return bbox;
+        return Bounds(glm::vec3(-radius) + center, glm::vec3(radius) + center);
     }
     
     __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const {
@@ -55,7 +53,6 @@ public:
     }
 
 private:
-    Bounds bbox;
     float radius;
     glm::vec3 center;
 };
