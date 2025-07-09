@@ -24,16 +24,16 @@ public:
 
     __host__ __device__ Bounds bounds() const {
         Bounds b;
-        b.enclose(mesh->vertices[idx.r]);
-        b.enclose(mesh->vertices[idx.s]);
-        b.enclose(mesh->vertices[idx.t]);
+        b.enclose(mesh->vertices[idx.x]);
+        b.enclose(mesh->vertices[idx.y]);
+        b.enclose(mesh->vertices[idx.z]);
         return b;
     }
 
     __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const {
-        const glm::vec3& p0 = mesh->vertices[idx.r];
-        const glm::vec3& p1 = mesh->vertices[idx.s];
-        const glm::vec3& p2 = mesh->vertices[idx.t];
+        const glm::vec3& p0 = mesh->vertices[idx.x];
+        const glm::vec3& p1 = mesh->vertices[idx.y];
+        const glm::vec3& p2 = mesh->vertices[idx.z];
 
         // Moller Trumbore algorithm
         glm::vec3 p = r.o - p0;

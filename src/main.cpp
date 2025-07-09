@@ -48,11 +48,13 @@ BVH<Object> *create_scene(const char *filename) {
         checkCudaErrors(cudaMemcpy(verts, mesh->vertices.data(), v_size, cudaMemcpyHostToDevice));
         checkCudaErrors(cudaMemcpy(norms, mesh->normals.data(), n_size, cudaMemcpyHostToDevice));
 
-        TriangleMesh tri_mesh{verts, norms, !mesh->normals.empty()};
+        TriangleMesh *tri_mesh;
+        checkCudaErrors(cudaMallocManaged((void**)&tri_mesh, sizeof(TriangleMesh)));
+        *tri_mesh = TriangleMesh{verts, norms, !mesh->normals.empty()};
 
         std::vector<Object> tri_vec;
         for (int i = 0; i < mesh->getNumPrims(); ++i) {
-            tri_vec.push_back(Object(Triangle(&tri_mesh, mini_to_ivec3(mesh->indices[i]))));
+            tri_vec.push_back(Object(Triangle(tri_mesh, mini_to_ivec3(mesh->indices[i]))));
         }
 
         // BVH construction
@@ -112,7 +114,7 @@ int main(void) {
     checkCudaErrors(cudaMallocManaged((void **)&cam, sizeof(Camera)));
     *cam = Camera();
     cam->set_aspect((float)nx/ny);
-    cam->look_at(glm::vec3(0.f, -5.f, -7.f), glm::vec3(0.f));
+    cam->look_at(glm::vec3(0.f, 100.f, -150.f), glm::vec3(0.f));
 
     // BVH setup
     // std::vector<Object> prm_vec;
