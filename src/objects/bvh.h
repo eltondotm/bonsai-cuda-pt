@@ -28,7 +28,11 @@ public:
         return bvh[0].bbox;
     }
 
-    __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const {
+    // Hit should not be called on BVHs -- only included to satisfy the object interface
+    __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const { return false; }
+
+    // Intersect is called on the top level BVH
+    __host__ __device__ bool intersect(const Ray& r, HitRecord& rec) const {
         bool hit = false;
 
         // Precomputing values for faster bbox intersection
@@ -52,11 +56,9 @@ public:
                         const Primitive &prim = root->prims[node->start_idx + i];
                         if (const BVH<Primitive> *tree = cuda::std::get_if<BVH<Primitive>>(&(prim.underlying))) {
                             roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
-                            to_visit[to_visit_idx] = node_idx;
-                        } else if (const Sphere *sphere = cuda::std::get_if<Sphere>(&(prim.underlying))) {
-                            hit |= sphere->hit(r, rec);
-                        } else if (const Triangle *tri = cuda::std::get_if<Triangle>(&(prim.underlying))) {
-                            hit |= tri->hit(r, rec);
+                            to_visit[to_visit_idx] = 0;
+                        } else {
+                            hit |= prim.hit(r, rec);
                         }
                     }
                     // No intersection, move on to next node

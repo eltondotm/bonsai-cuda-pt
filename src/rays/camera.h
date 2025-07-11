@@ -44,9 +44,9 @@ public:
     __host__ __device__ void look_at(glm::vec3 pos, glm::vec3 target) {
         position = pos;
         looking_at = target;
-        radius = glm::length(pos - target);
+        radius = glm::length(target - pos);
 
-        glm::vec3 dir = glm::normalize(pos - target);
+        glm::vec3 dir = glm::normalize(target - pos);
         glm::vec3 up  = glm::vec3(0.f, 1.f, 1.f);
         rotation = glm::quatLookAt(dir, up);
         view_update();

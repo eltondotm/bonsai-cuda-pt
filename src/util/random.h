@@ -79,4 +79,7 @@ __host__ glm::vec2 disk();
 // Uniformly samples a unit hemisphere
 __host__ __device__ glm::vec3 hemisphere();
 
+// Samples hemisphere with cosine weighting
+__host__ __device__ glm::vec3 hemisphere_cosine(float& pdf);
+
 }  // namespace rng

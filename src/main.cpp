@@ -74,6 +74,8 @@ BVH<Object> *create_scene(const char *filename) {
         tri_bvhs.push_back(BVH<Object>(tri, tri_vec.size(), bvh));
     }
 
+    //tri_bvhs.erase(tri_bvhs.begin(), tri_bvhs.begin()+6);
+    //tri_bvhs.erase(tri_bvhs.begin()+1, tri_bvhs.end());
     std::vector<BVHNode> scn_bvh = build_bvh(tri_bvhs, Midpoint);
 
     int n_bytes_scn = tri_bvhs.size()*sizeof(Object);
@@ -101,7 +103,7 @@ int main(void) {
 
     clock_t t = clock();
     std::cout << "Building BVH... ";
-    BVH<Object> *scn = create_scene("goat.mini");
+    BVH<Object> *scn = create_scene("assets/cbox.mini");
     t = clock() - t;
     std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";
 
@@ -114,7 +116,7 @@ int main(void) {
     checkCudaErrors(cudaMallocManaged((void **)&cam, sizeof(Camera)));
     *cam = Camera();
     cam->set_aspect((float)nx/ny);
-    cam->look_at(glm::vec3(0.f, 100.f, -150.f), glm::vec3(0.f));
+    cam->look_at(glm::vec3(0.f, 1.3f, 2.f), glm::vec3(0.f, 1.f, 0.f));
 
     // BVH setup
     // std::vector<Object> prm_vec;

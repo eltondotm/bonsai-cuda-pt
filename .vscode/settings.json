@@ -78,6 +78,11 @@
         "xlocmon": "cpp",
         "xloctime": "cpp",
         "inplace_vector": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "condition_variable": "cpp",
+        "coroutine": "cpp",
+        "resumable": "cpp",
+        "future": "cpp",
+        "unordered_set": "cpp"
     }
 }

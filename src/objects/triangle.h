@@ -66,7 +66,7 @@ public:
             norm = norm_a + norm_b + norm_c;
         } else {
             // Default to plane normal (not smooth)
-            norm = glm::cross(ab, ac);
+            norm = glm::normalize(glm::cross(ab, ac));
         }
         
 

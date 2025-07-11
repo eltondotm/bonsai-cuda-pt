@@ -148,4 +148,20 @@ __host__ __device__ glm::vec3 hemisphere() {
     return glm::vec3(x, y, z);
 }
 
+// Samples hemisphere with cosine weighting
+__host__ __device__ glm::vec3 hemisphere_cosine(float &pdf) {
+    float eps0 = unit();
+    float eps1 = unit();
+
+    float theta = acos(sqrtf(eps0));
+    float phi = glm::radians(360.f) * eps1;
+
+    float x = std::sin(theta) * std::cos(phi);
+    float y = std::cos(theta);
+    float z = std::sin(theta) * std::sin(phi);
+
+    pdf = y / glm::radians(180.f);
+    return glm::vec3(x, y, z);
+}
+
 }  // namespace rng
