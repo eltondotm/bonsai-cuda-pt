@@ -100,7 +100,7 @@ BVH<Object> *create_scene(const char *filename) {
 int main(void) {
     int nx = 1280;
     int ny = 720;
-    int ns = 10;
+    int ns = 100;
     int nchannels = 3;
 
     clock_t t = clock();
