@@ -74,7 +74,7 @@ __host__ __device__ float unit();
 __host__ __device__ glm::vec2 square();
 
 // Uniformly samples a unit disk (Shirley's method for reduced distortion)
-__host__ glm::vec2 disk();
+__host__ __device__ glm::vec2 disk();
 
 // Uniformly samples a unit hemisphere
 __host__ __device__ glm::vec3 hemisphere();

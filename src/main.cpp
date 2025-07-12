@@ -8,6 +8,7 @@
 #include <miniScene/Scene.h>
 
 #include "util/cuda_errors.h"
+#include "util/random_declarations.h"
 #include "util/image.h"
 #include "util/file.h"
 #include "camera.h"
@@ -15,11 +16,11 @@
 #include "triangle.h"
 #include "bvh_build.h"
 
+//#define CPU
 #define GPU
-#define CPU
 
-void render    (int sx, int sy, glm::vec3 *out, Camera *cam, BVH<Object> *obj);
-void render_cpu(int sx, int sy, glm::vec3 *out, Camera *cam, BVH<Object> *obj);
+void render    (int sx, int sy, int ns, glm::vec3 *out, Camera *cam, BVH<Object> *obj);
+void render_cpu(int sx, int sy, int ns, glm::vec3 *out, Camera *cam, BVH<Object> *obj);
 
 // Util functions for converting between miniScene and glm
 inline glm::vec3 mini_to_vec3(mini::vec3f mini) { return glm::vec3(mini.x, mini.y, mini.z); }
@@ -99,6 +100,7 @@ BVH<Object> *create_scene(const char *filename) {
 int main(void) {
     int nx = 1280;
     int ny = 720;
+    int ns = 10;
     int nchannels = 3;
 
     clock_t t = clock();
@@ -155,9 +157,10 @@ int main(void) {
 
     #ifdef CPU
     {
+        rng::init_host();
         clock_t t = clock();
         std::cout << "Rendering on CPU... ";
-        render_cpu(nx, ny, out, cam, scn);
+        render_cpu(nx, ny, ns, out, cam, scn);
         t = clock() - t;
         std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";
 
@@ -165,14 +168,16 @@ int main(void) {
         std::cout << "Writing to cpu.png\n";
         write_png(write_filepath("cpu.png").c_str(), nx, ny, png);
         delete[] png;
+        rng::cleanup_host();
     }
     #endif
 
     #ifdef GPU 
     {
+        rng::init_device(nx, ny);
         clock_t t = clock();
         std::cout << "Rendering on GPU... ";
-        render(nx, ny, out, cam, scn);
+        render(nx, ny, ns, out, cam, scn);
         checkCudaErrors(cudaDeviceSynchronize());
         t = clock() - t;
         std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";
@@ -181,6 +186,7 @@ int main(void) {
         std::cout << "Writing to gpu.png\n";
         write_png(write_filepath("gpu.png").c_str(), nx, ny, png);
         delete[] png;
+        rng::cleanup_device();
     }
     #endif
 

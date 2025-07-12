@@ -68,10 +68,8 @@ __host__ void init_device(int width, int height) {
         cleanup_device();
 
     checkCudaErrors(cudaMalloc((void **)&h_rand_state, width*height*sizeof(curandState)));
-    checkCudaErrors(cudaMemcpyToSymbol(&rand_state, &h_rand_state, sizeof(curandState *), 
-                    cudaMemcpyDeviceToDevice));
-    
-    checkCudaErrors(cudaMemcpyToSymbol(&w, &width, sizeof(int), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyToSymbol(rand_state, &h_rand_state, sizeof(curandState *)));
+    checkCudaErrors(cudaMemcpyToSymbol(w, &width, sizeof(int)));
 
     dim3 threads(8, 8);
     dim3 blocks((width+threads.x-1) / threads.x, (height+threads.y-1) / threads.y);
@@ -119,7 +117,7 @@ __host__ __device__ glm::vec2 square() {
 }
 
 // Uniformly samples a unit disk (Shirley's method for reduced distortion)
-__host__ glm::vec2 disk() {
+__host__ __device__ glm::vec2 disk() {
     glm::vec2 xi = 2.f * square() - glm::vec2(1.f);
 
     float theta, r;

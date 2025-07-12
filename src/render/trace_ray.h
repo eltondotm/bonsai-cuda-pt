@@ -2,8 +2,10 @@
 #pragma once
 
 #include <cuda_runtime.h>
-#include <glm/common.hpp>
+
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/vec3.hpp>
+#include <glm/gtx/rotate_vector.hpp>
 
 #include "ray.h"
 #include "object.h"
