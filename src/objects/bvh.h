@@ -89,7 +89,7 @@ public:
         return hit; 
     }
 
-private:
+    // Left public to allow deallocating externally
     Primitive *prims;
     BVHNode *bvh;
 };

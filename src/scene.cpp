@@ -110,6 +110,34 @@ Scene create_scene(const char *filename) {
     return converted_scene;
 }
 
-void free_scene(BVH<Object> *scene) {
+// Deallocates a BVH of triangle mesh BVHs
+void free_tri_mesh_bvh(const BVH<Object> *geo, int idx) {
+    const BVHNode& node = geo->bvh[idx];
+    const Object *prims = geo->prims;
 
+    if (node.num_hitables != 0) {
+        const BVH<Object>& tri_bvh = cuda::std::get<BVH<Object>>(prims[node.start_idx].underlying);
+        const Triangle& tri = cuda::std::get<Triangle>(tri_bvh.prims[0].underlying);
+
+        checkCudaErrors(cudaFree(tri.mesh->vertices));
+        checkCudaErrors(cudaFree(tri.mesh->normals));
+        checkCudaErrors(cudaFree(tri.mesh));
+        checkCudaErrors(cudaFree(tri_bvh.prims));
+        checkCudaErrors(cudaFree(tri_bvh.bvh));
+        return;
+    }
+
+    free_tri_mesh_bvh(geo, idx + 1);
+    free_tri_mesh_bvh(geo, node.one_idx);
+}
+
+// Assumes two-level BVH (which is true for any scene built with create_scene())
+void free_scene(const Scene& scene) {
+    free_tri_mesh_bvh(scene.geometry, 0);
+
+    checkCudaErrors(cudaFree(scene.geometry->prims));
+    checkCudaErrors(cudaFree(scene.geometry->bvh));
+    checkCudaErrors(cudaFree(scene.geometry));
+    checkCudaErrors(cudaFree(scene.camera));
+    checkCudaErrors(cudaFree(scene.emitters));
 }

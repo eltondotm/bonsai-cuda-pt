@@ -104,7 +104,7 @@ public:
         return ab*uv.x + ac*uv.y + p0;
     }
 
-private:
+    // Left public to allow freeing externally
     TriangleMesh *mesh;
     glm::ivec3 idx;
 };

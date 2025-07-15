@@ -22,4 +22,8 @@ Material mini_disney_to_material(mini::DisneyMaterial::SP mini_mat);
 // Loading a .mini file, then converting to a gpu-friendly format for rendering
 Scene create_scene(const char *filename);
 
-void free_scene(BVH<Object> *scene);
+// Deallocates a BVH of triangle mesh BVHs
+void free_tri_mesh_bvh(const BVH<Object> *geo, int idx);
+
+// Assumes a two level BVH (which is true for any scene built with create_scene())
+void free_scene(const Scene& scene);

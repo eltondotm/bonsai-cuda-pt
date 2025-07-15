@@ -29,15 +29,15 @@ int main(int argc, char *argv[]) {
         std::string arg = argv[i];
         if (arg == "-w" || arg == "--width") {
             if (i + 1 < argc)
-                nx = (int)argv[++i];
+                nx = std::stoi(argv[++i]);
         }
         else if (arg == "-h" || arg == "--height") {
             if (i + 1 < argc)
-                ny = (int)argv[++i];
+                ny = std::stoi(argv[++i]);
         }
         else if (arg == "-s" || arg == "--samples") {
             if (i + 1 < argc)
-                ns = (int)argv[++i];
+                ns = std::stoi(argv[++i]);
         }
         else if (arg == "-f" || arg == "--file") {
             if (i + 1 < argc)
@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
         }
         else if (arg == "-o" || arg == "--out") {
             if (i + 1 < argc)
-                scene_path = argv[++i];
+                output_path = argv[++i];
         }
         else {
             std::cout << "Usage:\n"
@@ -119,9 +119,7 @@ int main(int argc, char *argv[]) {
         rng::cleanup_host();
     }
 
+    free_scene(scene);
     checkCudaErrors(cudaFree(out));
-    checkCudaErrors(cudaFree(scene.camera));
-    checkCudaErrors(cudaFree(scene.geometry));
-    checkCudaErrors(cudaFree(scene.emitters));
     return 0;
 }
