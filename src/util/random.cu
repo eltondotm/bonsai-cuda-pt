@@ -116,6 +116,13 @@ __host__ __device__ glm::vec2 square() {
     return glm::vec2(unit(), unit());
 }
 
+// Uniformly samples a unit triangle
+__host__ __device__ glm::vec2 triangle() {
+    float xi0 = unit();
+    float xi1 = unit() * (1.f-xi0);
+    return glm::vec2(xi0, xi1);
+}
+
 // Uniformly samples a unit disk (Shirley's method for reduced distortion)
 __host__ __device__ glm::vec2 disk() {
     glm::vec2 xi = 2.f * square() - glm::vec2(1.f);
@@ -133,7 +140,7 @@ __host__ __device__ glm::vec2 disk() {
 }
 
 // Uniformly samples a unit hemisphere
-__host__ __device__ glm::vec3 hemisphere() {
+__host__ __device__ glm::vec3 hemisphere(float& pdf) {
     glm::vec2 xi = square();
 
     float theta = acos(xi.x);
@@ -142,6 +149,8 @@ __host__ __device__ glm::vec3 hemisphere() {
     float x = sin(theta) * cos(phi);
     float y = cos(theta);
     float z = sin(theta) * sin(phi);
+
+    pdf = 1.f / glm::radians(360.f);
 
     return glm::vec3(x, y, z);
 }

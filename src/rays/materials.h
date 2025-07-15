@@ -4,9 +4,15 @@
 #include <cuda_runtime.h>
 #include <cuda/std/variant>
 
-#include <glm/common.hpp>
+#include <miniScene/Scene.h>
 
-#include "util/random.h"
+#include <glm/vec3.hpp>
+#include <glm/trigonometric.hpp>
+
+#include "util/random_declarations.h"
+
+template<class... Ts> struct overloaded : Ts ... { using Ts::operator() ...; };
+template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 struct BSDFSample {
     glm::vec3 emission;
@@ -17,35 +23,31 @@ struct BSDFSample {
 
 struct Lambertian {
     glm::vec3 albedo;
-    BSDFSample sample(glm::vec3 wo) const;
+    __host__ __device__ BSDFSample sample(glm::vec3 wo) const;
 };
 
 struct Metallic {
     glm::vec3 albedo;
-    glm::vec3 fuzz;
-    BSDFSample sample(glm::vec3 wo) const;
+    float fuzz;
+    __host__ __device__ BSDFSample sample(glm::vec3 wo) const;
 };
 
 struct Glass {
-    glm::vec3 ior;
-    BSDFSample sample(glm::vec3 wo) const;
+    float ior;
+    __host__ __device__ BSDFSample sample(glm::vec3 wo) const;
 };
 
 struct Emissive {
     glm::vec3 emission;
-    BSDFSample sample(glm::vec3 wo) const;
+    __host__ __device__ BSDFSample sample(glm::vec3 wo) const;
 };
 
 using Material = cuda::std::variant<Lambertian, Metallic, Glass, Emissive>;
 
-// Lambertian diffuse
-glm::vec3 sample_diffuse(glm::vec3 wo) {
-    float pdf = 0.f;
-    glm::vec3 wi = rng::hemisphere_cosine(pdf);
+__host__ __device__ BSDFSample sample_bsdf(const Material *m, glm::vec3 wo);
 
-}
-
-BSDFSample Lambertian::sample(glm::vec3 wo) const {
+#ifdef __CUDACC__
+__host__ __device__ BSDFSample Lambertian::sample(glm::vec3 wo) const {
     float pdf = 0.f;
     glm::vec3 wi = rng::hemisphere_cosine(pdf);
 
@@ -57,15 +59,15 @@ BSDFSample Lambertian::sample(glm::vec3 wo) const {
     return sample;
 }
 
-BSDFSample Metallic::sample(glm::vec3 wo) const {
+__host__ __device__ BSDFSample Metallic::sample(glm::vec3 wo) const {
     return BSDFSample();
 }
 
-BSDFSample Glass::sample(glm::vec3 wo) const {
+__host__ __device__ BSDFSample Glass::sample(glm::vec3 wo) const {
     return BSDFSample();
 }
 
-BSDFSample Emissive::sample(glm::vec3 wo) const {
+__host__ __device__ BSDFSample Emissive::sample(glm::vec3 wo) const {
     BSDFSample sample;
     sample.emission = emission;
     sample.attenuation = glm::vec3(0.f);
@@ -73,11 +75,10 @@ BSDFSample Emissive::sample(glm::vec3 wo) const {
     return sample;
 }
 
-template<class... Ts> struct overloaded : Ts ... { using Ts::operator() ...; };
-template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
-BSDFSample sample(const Material& m, glm::vec3 wo) {
+__host__ __device__ BSDFSample sample_bsdf(const Material& m, glm::vec3 wo) {
     return cuda::std::visit(overloaded{
         [&wo](const auto& mat) { return mat.sample(wo); }
     }, m);
 }
+#endif

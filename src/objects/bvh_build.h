@@ -32,6 +32,11 @@ struct BVHTreeNode {
     int split_axis;
 };
 
+struct SAHBucket {
+    int count = 0;
+    Bounds bbox;
+};
+
 // BVHNode defined in bvh.h
 
 enum PartitionMethod {
@@ -43,5 +48,6 @@ using ObjectIt = std::vector<Object>::iterator;
 
 std::vector<BVHNode> build_bvh(std::vector<Object>& objects, PartitionMethod method);
 BVHTreeNode *partition_midpoint(std::vector<Object>& objects, int start_idx, int count, const int leaf_size);
+BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int count, const int leaf_size);
 void flatten_tree(std::vector<BVHNode>& bvh, BVHTreeNode *tree_node, int *idx);
 void deallocate_tree(BVHTreeNode *root);

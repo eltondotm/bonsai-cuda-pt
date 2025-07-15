@@ -19,7 +19,9 @@ add_executable (pt ${MAIN} ${RENDER} ${OBJECTS} ${UTIL})
 
 set_target_properties(pt PROPERTIES CXX_STANDARD 17 CUDA_STANDARD 17 CUDA_SEPARABLE_COMPILATION ON)
 
-target_compile_options(pt PRIVATE $<$<COMPILE_LANGUAGE:CUDA>: -G -g --expt-relaxed-constexpr>)
+set(DEBUG_FLAGS -G -g)
+
+target_compile_options(pt PRIVATE $<$<COMPILE_LANGUAGE:CUDA>: -lineinfo --expt-relaxed-constexpr>)
 
 target_include_directories(pt PRIVATE 
   "src" 

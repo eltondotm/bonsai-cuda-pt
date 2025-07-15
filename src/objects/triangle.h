@@ -2,16 +2,21 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include <cuda/std/variant>
 
+#include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <miniScene/Scene.h>
 
 #include "bounds.h"
 #include "hit_record.h"
+#include "materials.h"
+
 
 struct TriangleMesh {
-    glm::vec3  *vertices;
-    glm::vec3  *normals;
+    glm::vec3 *vertices;
+    glm::vec3 *normals;
+    Material   material;
 
     bool has_normals = false;
 };
@@ -69,17 +74,34 @@ public:
             norm = glm::normalize(glm::cross(ab, ac));
         }
         
-
-        // Flip uv for back triangle
-        // if(ab.x > 0 || ab.z > 0) {
-        //     u = 1.0f - u;
-        //     v = 1.0f - v;
-        // }
-        
         rec.position = r.at(t);
         rec.normal = norm;
         rec.time = t;
+        rec.material = &mesh->material;
         return true;
+    }
+
+    __host__ __device__ float area() const {
+        const glm::vec3& p0 = mesh->vertices[idx.x];
+        const glm::vec3& p1 = mesh->vertices[idx.y];
+        const glm::vec3& p2 = mesh->vertices[idx.z];
+
+        glm::vec3 ab = p1 - p0;
+        glm::vec3 ac = p2 - p0;
+
+        return 0.5f * glm::length(glm::cross(ab, ac));
+    }
+
+    // Converts a barycentric coordinate to world space
+    __host__ __device__ glm::vec3 point_at_barycentric(glm::vec2 uv) const {
+        const glm::vec3& p0 = mesh->vertices[idx.x];
+        const glm::vec3& p1 = mesh->vertices[idx.y];
+        const glm::vec3& p2 = mesh->vertices[idx.z];
+
+        glm::vec3 ab = p1 - p0;
+        glm::vec3 ac = p2 - p0;
+
+        return ab*uv.x + ac*uv.y + p0;
     }
 
 private:

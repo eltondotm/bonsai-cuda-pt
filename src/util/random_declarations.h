@@ -17,7 +17,8 @@ namespace rng {
 
     __host__ __device__ float unit();
     __host__ __device__ glm::vec2 square();
+    __host__ __device__ glm::vec2 triangle();
     __host__ __device__ glm::vec2 disk();
-    __host__ __device__ glm::vec3 hemisphere();
+    __host__ __device__ glm::vec3 hemisphere(float& pdf);
     __host__ __device__ glm::vec3 hemisphere_cosine(float& pdf);
 }

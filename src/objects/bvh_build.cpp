@@ -74,7 +74,46 @@ BVHTreeNode *partition_midpoint(std::vector<Object>& objects, int start_idx, int
     return root;
 }
 
-// BVH array must be already allocated
+BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int count, const int leaf_size) {
+    ObjectIt start = objects.begin() + start_idx;
+    ObjectIt end   = start + count;
+    
+    // Base case: leaf node
+    if (count <= leaf_size) {
+        Bounds leaf_bounds;
+        for (ObjectIt h = start; h != end; ++h) {
+            leaf_bounds = union_bounds(leaf_bounds, h->bounds());
+        }
+        BVHTreeNode *leaf = new BVHTreeNode;
+        leaf->create_leaf(leaf_bounds, start_idx, count);
+        return leaf;
+    }
+
+    // Construct bounding box for centroids of all boxes in the range
+    Bounds centroid_bounds;
+    for (ObjectIt h = start; h != end; ++h) {
+        centroid_bounds.enclose(h->bounds().centroid());
+    }
+    // Find the midpoint along the largest dimension
+    int dim = centroid_bounds.max_extent_dim();
+
+    constexpr int n_buckets = 12;
+    
+    SAHBucket buckets[n_buckets];
+    float costs[n_buckets-1];
+
+    for (const Object& obj : objects) {
+        int bucket = n_buckets * centroid_bounds.normalize_point(obj.bounds().centroid())[dim];
+        if (bucket == n_buckets)
+            bucket = n_buckets-1;
+        buckets[bucket].count++;
+        buckets[bucket].bbox.enclose(obj.bounds());
+    }
+
+    return new BVHTreeNode();
+}
+
+// Pack binary tree into a contiguous array
 void flatten_tree(std::vector<BVHNode>& bvh, BVHTreeNode *tree_node, int *idx) {
     int curr_idx = *idx;
     ++(*idx);  // Move to next array position

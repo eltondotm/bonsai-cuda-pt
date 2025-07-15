@@ -44,7 +44,7 @@ __host__ void generate_buffer();
 __host__ void cleanup_host();
 
 // Creates generator and allocates buffers, reinitializes on future calls
-__host__ void init_host(size_t buffer_size = 1024);
+__host__ void init_host(size_t buffer_size);
 
 
 ///////////////////////////////////////
@@ -73,11 +73,14 @@ __host__ __device__ float unit();
 // Uniformly samples a unit square (0, 1]^2
 __host__ __device__ glm::vec2 square();
 
+// Uniformly samples a unit triangle
+__host__ __device__ glm::vec2 triangle();
+
 // Uniformly samples a unit disk (Shirley's method for reduced distortion)
 __host__ __device__ glm::vec2 disk();
 
 // Uniformly samples a unit hemisphere
-__host__ __device__ glm::vec3 hemisphere();
+__host__ __device__ glm::vec3 hemisphere(float& pdf);
 
 // Samples hemisphere with cosine weighting
 __host__ __device__ glm::vec3 hemisphere_cosine(float& pdf);
