@@ -58,7 +58,7 @@ Scene create_scene(const char *filename) {
         }
 
         // BVH construction
-        std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, Midpoint);
+        std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH);
 
         int n_bytes_tri = tri_vec.size()*sizeof(Object);
         int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);

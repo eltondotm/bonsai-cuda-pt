@@ -2,15 +2,18 @@
 #include "bvh_build.h"
 
 #include <algorithm>
+#include <limits>
 
 std::vector<BVHNode> build_bvh(std::vector<Object>& objects, PartitionMethod method) {
     BVHTreeNode *tree;
     switch (method) {
-        case SAH:
         case Midpoint:
-        default:
             tree = partition_midpoint(objects, 0, (int)objects.size(), 1);
             break;
+        case SAH:
+        default:
+            tree = partition_sah(objects, 0, (int)objects.size(), 1);
+            break;     
     }
 
     std::vector<BVHNode> bvh;
@@ -89,16 +92,20 @@ BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int coun
         return leaf;
     }
 
-    // Construct bounding box for centroids of all boxes in the range
+
+    // Construct bounding boxes: centroid for split, combined for surface area calculation
     Bounds centroid_bounds;
+    Bounds combined_bounds;
     for (ObjectIt h = start; h != end; ++h) {
         centroid_bounds.enclose(h->bounds().centroid());
+        combined_bounds.enclose(h->bounds());
     }
     // Find the midpoint along the largest dimension
     int dim = centroid_bounds.max_extent_dim();
 
     constexpr int n_buckets = 12;
     
+    // Bucketing logic references PBRT
     SAHBucket buckets[n_buckets];
     float costs[n_buckets-1];
 
@@ -110,7 +117,65 @@ BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int coun
         buckets[bucket].bbox.enclose(obj.bounds());
     }
 
-    return new BVHTreeNode();
+    // Add the cost of the left child to costs
+    int count_left = 0;
+    Bounds bound_left;
+    for (int i = 0; i < n_buckets - 1; ++i) {
+        bound_left.enclose(buckets[i].bbox);
+        count_left += buckets[i].count;
+        costs[i] = count_left * bound_left.surface_area();
+    }
+
+    // Add the cost of the right child to costs
+    int count_above = 0;
+    Bounds bound_right;
+    for (int i = n_buckets - 1; i > 0; --i) {
+        bound_right.enclose(buckets[i].bbox);
+        count_above += buckets[i].count;
+        costs[i - 1] += count_above * bound_right.surface_area();
+    }
+
+    // Find the best split
+    int best_bucket = -1;
+    float min_cost = std::numeric_limits<float>::max();
+    for (int i = 0; i < n_buckets - 1; ++i) {
+        // Compute cost for candidate split and update minimum if
+        // necessary
+        if (costs[i] < min_cost) {
+            min_cost = costs[i];
+            best_bucket = i;
+        }
+    }
+
+    // c_trav = 0.5, c_isect = 1.0
+    min_cost = 0.5f + min_cost / combined_bounds.surface_area();
+
+    // Partition based on centroid dimension
+    ObjectIt split_it = std::partition(start, end, 
+        [dim, n_buckets, best_bucket, &centroid_bounds](const Object& h) {
+            int bucket = n_buckets * centroid_bounds.normalize_point(h.bounds().centroid())[dim];
+            return bucket <= best_bucket;
+        });
+
+    // Fallback: divide in half if SAH fails to split
+    if (split_it == start || split_it == end) {
+        split_it = start + (count / 2);
+        std::nth_element(start, split_it, end, 
+            [dim](const Object& a, const Object& b) {
+                return a.bounds().centroid()[dim] < b.bounds().centroid()[dim];
+            });
+    }
+
+    // Recursively partition and return the root node
+    int start_zero = start_idx;
+    int num_zero   = (int)(split_it - start);
+    int start_one  = start_idx + num_zero;
+    int num_one    = count - num_zero;
+    BVHTreeNode *zero = partition_midpoint(objects, start_zero, num_zero, leaf_size);
+    BVHTreeNode *one  = partition_midpoint(objects, start_one,  num_one,  leaf_size);
+    BVHTreeNode *root = new BVHTreeNode;
+    root->create_interior(zero, one, dim);
+    return root;
 }
 
 // Pack binary tree into a contiguous array
