@@ -46,8 +46,16 @@ enum PartitionMethod {
 
 using ObjectIt = std::vector<Object>::iterator;
 
+/* Construct a BVH given a vector of objects and a partition method 
+ * Modifies the objects vector such that every subtree covers a contiguous range */
 std::vector<BVHNode> build_bvh(std::vector<Object>& objects, PartitionMethod method);
+
+/* Construct a binary tree by recursively partitioning across the midpoint of the object range */
 BVHTreeNode *partition_midpoint(std::vector<Object>& objects, int start_idx, int count, const int leaf_size);
+
+/* Construct a binary tree that minimizes the surface area heuristic */
 BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int count, const int leaf_size);
+
+/* Takes a pointer-linked binary tree and flattens to linear storage */
 void flatten_tree(std::vector<BVHNode>& bvh, BVHTreeNode *tree_node, int *idx);
 void deallocate_tree(BVHTreeNode *root);

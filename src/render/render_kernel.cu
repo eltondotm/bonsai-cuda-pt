@@ -1,7 +1,7 @@
 
 #include <glm/vec3.hpp>
 
-#include "util/random_declarations.h"
+#include "util/random.h"
 #include "scene.h"
 #include "trace_ray.h"
 

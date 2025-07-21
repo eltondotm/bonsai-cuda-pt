@@ -16,11 +16,17 @@
 
 #include <iostream>
 
+#include "util/cuda_errors.h"
+
 namespace rng {
 
 ///////////////////////////////////////
 // Host generator management
 ///////////////////////////////////////
+
+static curandGenerator_t rng;
+static float *rand_buffer = nullptr;
+static size_t n;
 
 // Refills buffer and resets current index
 __host__ void generate_buffer() {
@@ -53,6 +59,12 @@ __host__ void cleanup_host() {
 ///////////////////////////////////////
 // Device generator management
 ///////////////////////////////////////
+
+__constant__ curandState *rand_state;
+__constant__ int w;  // To calculate pixel index
+
+static curandState *h_rand_state;  // Host copy of rand_state for cleanup
+static bool is_initialized = false;
 
 __global__ void d_init_device(int width, int height) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;

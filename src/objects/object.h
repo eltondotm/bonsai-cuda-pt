@@ -13,9 +13,6 @@
 #include "object_list.h"
 #include "bvh.h"
 
-// template<class... Ts> struct overloaded : Ts ... { using Ts::operator() ...; };
-// template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
-
 class Object {
 public:
     __host__ __device__ Object(Sphere&& sphere)

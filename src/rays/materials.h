@@ -5,12 +5,10 @@
 #include <cuda/std/variant>
 #include <cuda/std/utility>
 
-#include <miniScene/Scene.h>
-
 #include <glm/vec3.hpp>
 #include <glm/trigonometric.hpp>
 
-#include "util/random_declarations.h"
+#include "util/random.h"
 
 template<class... Ts> struct overloaded : Ts ... { using Ts::operator() ...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;

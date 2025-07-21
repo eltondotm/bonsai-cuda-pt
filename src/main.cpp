@@ -8,7 +8,7 @@
 #include <miniScene/Scene.h>
 
 #include "util/cuda_errors.h"
-#include "util/random_declarations.h"
+#include "util/random.h"
 #include "util/image.h"
 #include "util/file.h"
 #include "scene.h"

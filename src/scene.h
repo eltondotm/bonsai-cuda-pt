@@ -1,7 +1,6 @@
 
 #pragma once
 
-#include "bvh_build.h"
 #include "object.h"
 #include "camera.h"
 

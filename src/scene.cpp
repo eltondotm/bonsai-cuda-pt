@@ -3,11 +3,8 @@
 
 #include <curand.h>
 
-// check_cuda and check_curand defined in cuda_errors.h
-#define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
-void check_cuda(cudaError_t result, char const *const func, const char *const file, int const line);
-#define checkCurandErrors(val) check_curand( (val), #val, __FILE__, __LINE__ )
-void check_curand(curandStatus_t result, char const *const func, const char *const file, int const line);
+#include "util/cuda_errors.h"
+#include "bvh_build.h"
 
 std::string read_filepath(const char *filename);
 std::string write_filepath(const char *filename);

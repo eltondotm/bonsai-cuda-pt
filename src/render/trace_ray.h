@@ -7,12 +7,12 @@
 #include <glm/vec3.hpp>
 #include <glm/gtx/rotate_vector.hpp>
 
-#include "util/random_declarations.h"
+#include "util/random.h"
 #include "scene.h"
 
 #define MAX_BOUNCES 10
 #define LIGHT_SAMPLES 2
-#define EPS_F 0.001f
+#define EPS_F 0.0001f
 
 // Constructs a transformation matrix that rotates the input direction to (0, 1, 0)
 inline __host__ __device__ glm::mat4 rotate_to(glm::vec3 dir) {

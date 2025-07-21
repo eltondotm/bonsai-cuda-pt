@@ -12,6 +12,7 @@
 
 class Camera {
 public:
+    // Only no-arg constructor, use setter methods or look_at to initialize params
     __host__ __device__ Camera() :
         looking_at(0.f, 0.f, 0.f),
         rotation(glm::vec3(0.f)),
@@ -52,6 +53,7 @@ public:
         view_update();
     }
 
+    // Setter methods (too many parameters to include all in constructor)
     __host__ __device__ void set_rotation_euler(glm::vec3 euler) { rotation = glm::quat(glm::radians(euler)); view_update(); }
     __host__ __device__ void set_rotation_dir(glm::vec3 dir) { rotation = glm::quatLookAt(dir, glm::vec3(0.f, 1.f, 0.f)); view_update(); }
     __host__ __device__ void set_radius(float r) { radius = r; view_update(); }

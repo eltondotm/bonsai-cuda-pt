@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 #include <glm/vec3.hpp>
 
-#include "util/random_declarations.h"
+#include "util/random.h"
 #include "scene.h"
 
 glm::vec3 trace_ray(const Ray& r, const Scene& scene);
