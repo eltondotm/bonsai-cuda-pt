@@ -27,9 +27,9 @@ struct BVHTreeNode {
     Bounds bbox;
     BVHTreeNode *zero, *one;
     // Primaitives stored in the leaf
-    int start_idx, num_hitables;
+    int start_idx = 0, num_hitables = 0;
     // Axis the interior node was split along
-    int split_axis;
+    int split_axis = -1;
 };
 
 struct SAHBucket {

@@ -8,7 +8,8 @@
             "installDir": "${sourceDir}/install/${presetName}",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "cl.exe",
-                "CMAKE_CXX_COMPILER": "cl.exe"
+                "CMAKE_CXX_COMPILER": "cl.exe",
+                "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo"
             },
             "condition": {
                 "type": "equals",
@@ -37,6 +38,14 @@
             }
         },
         {
+            "name": "x64-relwithdebug",
+            "displayName": "x64 RelWithDebInfo",
+            "inherits": "x64-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
             "name": "x86-debug",
             "displayName": "x86 Debug",
             "inherits": "windows-base",
@@ -55,6 +64,28 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "x86-relwithdebug",
+            "displayName": "x86 RelWithDebInfo",
+            "inherits": "x86-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
         }
-    ]
+    ],
+    "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "x64-debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "x64-release"
+    },
+     {
+      "name": "relwithdebinfo",
+      "configurePreset": "x64-relwithdebug"
+    }
+  ]
 }

@@ -49,12 +49,14 @@ public:
         rec.position = r.at(t0);
         rec.normal = glm::normalize(rec.position - center);
         rec.time = t0;
+        rec.material = const_cast<Material *>(&mat);
         return true;
     }
 
 private:
     float radius;
     glm::vec3 center;
+    Material mat = Material(Lambertian{glm::vec3(1.f)});
 };
 
 #endif

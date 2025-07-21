@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include <stdexcept>
+
 #include <cuda_runtime.h>
 
 #include "bounds.h"
@@ -20,8 +22,8 @@ struct alignas(32) BVHNode {
 
 template<typename Primitive> class BVH {
 public:
-    __host__ __device__ BVH(Primitive *_prims, int _nprims, BVHNode *_bvh) 
-        : prims(_prims), bvh(_bvh) {
+    __host__ __device__ BVH(Primitive *_prims, int _nprims, BVHNode *_bvh, int _nnodes) 
+        : prims(_prims), nprims(_nprims), bvh(_bvh), nnodes(_nnodes) {
     }
 
     __host__ __device__ Bounds bounds() const {
@@ -46,6 +48,10 @@ public:
         BVH<Primitive> *root = const_cast<BVH<Primitive> *>(this);
 
         while (true) {
+            if (node_idx >= root->nnodes) {
+                printf("Out-of-bounds node index\n");
+                //break;
+            }
             const BVHNode *node = &(root->bvh[node_idx]);
             if (node->bbox.intersect(r, inv_dir, dir_sign)) {
                 // Intersection with bounds, check node
@@ -53,7 +59,15 @@ public:
                     // Leaf node, intersect with hitables
                     to_visit_idx--;
                     for (int i = 0; i < node->num_hitables; ++i) {
-                        const Primitive &prim = root->prims[node->start_idx + i];
+                        int prim_idx = node->start_idx + i;
+                        if (prim_idx >= root->nprims) {
+                            #ifndef __CUDA_ARCH__
+                            //throw std::runtime_error("Out-of-bounds primitive index");
+                            #endif
+                            printf("Out-of-bounds primitive index\n");
+                            //break;
+                        }
+                        const Primitive &prim = root->prims[prim_idx];
                         if (const BVH<Primitive> *tree = cuda::std::get_if<BVH<Primitive>>(&(prim.underlying))) {
                             roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
                             to_visit[to_visit_idx] = 0;
@@ -92,4 +106,6 @@ public:
     // Left public to allow deallocating externally
     Primitive *prims;
     BVHNode *bvh;
+    int nprims;
+    int nnodes;
 };

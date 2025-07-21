@@ -54,6 +54,7 @@ public:
     }
 
     __host__ __device__ void enclose(const Bounds& b) {
+        if (b.empty()) return;
         enclose(b.p_min);
         enclose(b.p_max);
     }
@@ -75,6 +76,10 @@ public:
         if (p_max.z > p_min.z)
             normalized.z /= p_max.z - p_min.z;
         return normalized;
+    }
+
+    __host__ __device__ bool empty() const {
+        return p_min == glm::vec3( INFINITY) && p_max == glm::vec3(-INFINITY);
     }
 
     __host__ __device__ glm::vec3 operator[](int i) const {

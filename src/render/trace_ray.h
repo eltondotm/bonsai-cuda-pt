@@ -12,7 +12,7 @@
 
 #define MAX_BOUNCES 10
 #define LIGHT_SAMPLES 2
-#define EPS_F 0.0001f
+#define EPS_F 0.001f
 
 // Constructs a transformation matrix that rotates the input direction to (0, 1, 0)
 inline __host__ __device__ glm::mat4 rotate_to(glm::vec3 dir) {
@@ -41,7 +41,7 @@ __host__ __device__ glm::vec3 trace_ray(const Ray& r, const Scene& scene) {
             // Transforming normal vector to (0, 1, 0) for easier material sampling
             glm::mat4 normal_to_world = rotate_to(rec.normal);
             glm::mat4 world_to_normal = glm::transpose(normal_to_world);
-            glm::vec3 wo = world_to_normal * glm::vec4(glm::normalize(ray.o - rec.position), 0.f);
+            glm::vec3 wo = world_to_normal * glm::vec4(ray.d, 0.f);
 
             // Sampling hit material
             BSDFSample sample = sample_bsdf(*rec.material, wo);
@@ -50,14 +50,20 @@ __host__ __device__ glm::vec3 trace_ray(const Ray& r, const Scene& scene) {
                 return sample.emission;
             radiance += sample.emission * throughput;
 
+            if (scene.n_emitters == 0)
+                radiance += glm::vec3(0.2f) * throughput;
+
             // Create new ray
             float cos_theta_i = sample.direction.y;
             glm::vec3 wi = normal_to_world * glm::vec4(sample.direction, 0.f);
             ray = Ray(rec.position, wi);
             ray.o = ray.at(EPS_F);
 
-            throughput *= sample.attenuation * cos_theta_i / sample.pdf;
-            if (throughput == glm::vec3(0.f)) break;
+            throughput *= sample.attenuation / sample.pdf;
+            if (!is_discrete(*rec.material))
+                throughput *= cos_theta_i;
+            if (throughput == glm::vec3(0.f)) 
+                break;
         } else {
             break;
         }

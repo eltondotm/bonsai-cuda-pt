@@ -1,6 +1,6 @@
 
 #include <iostream>
-#include <set>
+#include <map>
 
 #include <cuda_runtime.h>
 
@@ -11,10 +11,22 @@
 #include "util/random_declarations.h"
 #include "util/image.h"
 #include "util/file.h"
-#include "scene.cpp"
+#include "scene.h"
 
 void render    (int sx, int sy, int ns, glm::vec3 *out, Scene scene);
 void render_cpu(int sx, int sy, int ns, glm::vec3 *out, Scene scene);
+
+struct CameraParams {
+    glm::vec3 pos;
+    glm::vec3 target;
+};
+
+// Since obj files don't have camera position, save position for different files
+static const std::map<std::string, CameraParams> camera_defaults{
+    { "assets/cbox.mini", {glm::vec3(0.f, 1.f, 3.5f), glm::vec3(0.f, 1.f, 0.f)} },
+    { "assets/cbox-water.mini", {glm::vec3(0.f, 0.75f, 3.5f), glm::vec3(0.f, 0.75f, 0.f)} },
+    { "assets/dragon.mini", {glm::vec3(-0.5f, 10.f, 17.f), glm::vec3(-0.5f, 5.f, 0.f)} }
+};
 
 int main(int argc, char *argv[]) {
     int nx = 720;
@@ -24,6 +36,7 @@ int main(int argc, char *argv[]) {
     char *scene_path = "assets/cbox.mini";
     char *output_path = "out.png";
     bool use_gpu = true;
+    CameraParams cam_params{glm::vec3(0.f, 1.f, 3.5f), glm::vec3(0.f, 1.f, 0.f)};
 
     for (int i = 1; i != argc; ++i) {
         std::string arg = argv[i];
@@ -47,6 +60,12 @@ int main(int argc, char *argv[]) {
             if (i + 1 < argc)
                 output_path = argv[++i];
         }
+        else if (arg == "--cpu") {
+            use_gpu = false;
+        }
+        else if (arg == "--gpu") {
+            use_gpu = true;
+        }
         else {
             std::cout << "Usage:\n"
                          "-w [int] or --width [int] sets output width\n"
@@ -55,10 +74,42 @@ int main(int argc, char *argv[]) {
                          "-f [path] or --file [path] locates the input .mini file"
                          " relative to the root directory (or a parent).\n"
                          "-o [path] or --out [path] for the output .png file"
-                         " relative to the root directory.\n";
+                         " relative to the root directory.\n"
+                         "--cpu and --gpu specify rendering device.\n";
             return 0;
         }
     }
+
+    // Basic sphere scene for testing
+    // std::vector<Object> prm_vec;
+    // for (int j = 0; j < 2; ++j) {
+    //     float z = 0.5f - (float)j;
+    //     for (int i = 0; i < 2; ++i) {
+    //         float x = 0.5f - (float)i;
+    //         prm_vec.push_back(Object(Sphere(0.5f, glm::vec3(x, 0.f, z))));
+    //     }
+    // }
+
+    // std::vector<BVHNode> bvh_vec = build_bvh(prm_vec, SAH);
+
+    // // Convert to arrays to send to device
+    // int n_bytes_obj = prm_vec.size()*sizeof(Object);
+    // int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
+
+    // Object *prm;
+    // checkCudaErrors(cudaMallocManaged((void **)&prm, n_bytes_obj));
+    // checkCudaErrors(cudaMemcpy(prm, prm_vec.data(), n_bytes_obj, cudaMemcpyHostToDevice));
+
+    // BVHNode *bvh;
+    // checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
+    // checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
+
+    // BVH<Object> *obj;
+    // checkCudaErrors(cudaMallocManaged((void **)&obj, sizeof(BVH<Object>)));
+    // *obj = BVH<Object>(prm, prm_vec.size(), bvh, bvh_vec.size());
+
+    // Scene scene;
+    // scene.geometry = obj;
 
     clock_t t = clock();
     std::cout << "Building BVH... ";
@@ -71,12 +122,15 @@ int main(int argc, char *argv[]) {
     checkCudaErrors(cudaMallocManaged((void **)&out, nx*ny*sizeof(glm::vec3)));
 
     // Camera setup
+    if (camera_defaults.find(scene_path) != camera_defaults.end())
+        cam_params = camera_defaults.at(scene_path);
+
     Camera *cam;
     checkCudaErrors(cudaMallocManaged((void **)&cam, sizeof(Camera)));
     *cam = Camera();
     cam->set_fov(45.f);
     cam->set_aspect((float)nx/ny);
-    cam->look_at(glm::vec3(0.f, 1.f, 3.5f), glm::vec3(0.f, 1.f, 0.f));
+    cam->look_at(cam_params.pos, cam_params.target);
     
     scene.camera = cam;
 
@@ -98,7 +152,7 @@ int main(int argc, char *argv[]) {
         std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";
 
         char *png = vec_to_byte(out, nx, ny);
-        std::cout << "Writing to gpu.png\n";
+        std::cout << "Writing to " << output_path << std::endl;
         write_png(write_filepath(output_path).c_str(), nx, ny, png);
         delete[] png;
         rng::cleanup_device();
@@ -113,7 +167,7 @@ int main(int argc, char *argv[]) {
         std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";
 
         char *png = vec_to_byte(out, nx, ny);
-        std::cout << "Writing to cpu.png\n";
+        std::cout << "Writing to " << output_path << std::endl;
         write_png(write_filepath(output_path).c_str(), nx, ny, png);
         delete[] png;
         rng::cleanup_host();

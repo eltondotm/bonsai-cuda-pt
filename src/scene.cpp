@@ -1,8 +1,16 @@
 
 #include "scene.h"
 
-#include "util/cuda_errors.h"
-#include "util/file.h"
+#include <curand.h>
+
+// check_cuda and check_curand defined in cuda_errors.h
+#define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
+void check_cuda(cudaError_t result, char const *const func, const char *const file, int const line);
+#define checkCurandErrors(val) check_curand( (val), #val, __FILE__, __LINE__ )
+void check_curand(curandStatus_t result, char const *const func, const char *const file, int const line);
+
+std::string read_filepath(const char *filename);
+std::string write_filepath(const char *filename);
 
 // Util functions for converting between miniScene and glm
 inline glm::vec3 mini_to_vec3(mini::vec3f mini) { return glm::vec3(mini.x, mini.y, mini.z); }
@@ -10,12 +18,15 @@ inline glm::ivec3 mini_to_ivec3(mini::vec3i mini) { return glm::ivec3(mini.r, mi
 
 // Converting mini::DisneyMaterial to basic materials (cutoffs are arbitrary)
 Material mini_disney_to_material(mini::DisneyMaterial::SP mini_mat) {
+    glm::vec3 albedo = mini_to_vec3(mini_mat->baseColor);
     if (mini_mat->emission != mini::vec3f(0.f))
         return Material(Emissive{mini_to_vec3(mini_mat->emission)});
-    if (mini_mat->metallic > 0.1f)
-        return Material(Metallic{mini_to_vec3(mini_mat->baseColor), 1.0f-mini_mat->metallic});
-    if (mini_mat->transmission > 0.1f)
+    else if (mini_mat->metallic > 0.1f)
+        return Material(Metallic{albedo, 1.0f-mini_mat->metallic});
+    else if (mini_mat->ior == 1.33f || mini_mat->ior == 2.50f)
         return Material(Glass{mini_mat->ior});
+    else if (glm::dot(albedo, albedo) < 0.05f)
+        return Material(Metallic{glm::vec3(1.f), 0.f});
     return Material(Lambertian{mini_to_vec3(mini_mat->baseColor)});
 };
 
@@ -26,8 +37,8 @@ Scene create_scene(const char *filename) {
     // Gathering unique meshes
     std::set<mini::Mesh::SP> meshes;
     for (const mini::Instance::SP inst : scene->instances) {
-        for (const mini::Mesh::SP mesh : inst->object->meshes) {
-            meshes.insert(mesh);
+        for (const mini::Mesh::SP tri_mesh : inst->object->meshes) {
+            meshes.insert(tri_mesh);
         }
     }
 
@@ -35,7 +46,7 @@ Scene create_scene(const char *filename) {
     std::vector<Object *>emitters;
 
     std::vector<Object> tri_bvhs;
-    for (const mini::Mesh::SP mesh : meshes) {
+    for (const mini::Mesh::SP& mesh : meshes) {
         // Moving mesh data to arrays for access from host or device
         glm::vec3 *verts;
         glm::vec3 *norms;
@@ -71,7 +82,7 @@ Scene create_scene(const char *filename) {
         checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
         checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
 
-        tri_bvhs.push_back(BVH<Object>(tri, tri_vec.size(), bvh));
+        tri_bvhs.push_back(BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size()));
 
         if (const Emissive *e = cuda::std::get_if<Emissive>(&material)) {
             for (int i = 0; i < tri_vec.size(); ++i) {
@@ -80,23 +91,23 @@ Scene create_scene(const char *filename) {
         }
     }
 
-    std::vector<BVHNode> scn_bvh = build_bvh(tri_bvhs, Midpoint);
+    std::vector<BVHNode> scn_bvh_vec = build_bvh(tri_bvhs, SAH);
 
     int n_bytes_scn = tri_bvhs.size()*sizeof(Object);
-    int n_bytes_bvh = scn_bvh.size()*sizeof(BVHNode);
+    int n_bytes_bvh = scn_bvh_vec.size()*sizeof(BVHNode);
     int n_bytes_emt = emitters.size()*sizeof(Object *);
 
     Object *scn;
     checkCudaErrors(cudaMallocManaged((void **)&scn, n_bytes_scn));
     checkCudaErrors(cudaMemcpy(scn, tri_bvhs.data(), n_bytes_scn, cudaMemcpyHostToDevice));
 
-    BVHNode *bvh;
-    checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
-    checkCudaErrors(cudaMemcpy(bvh, scn_bvh.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
+    BVHNode *scn_bvh;
+    checkCudaErrors(cudaMallocManaged((void **)&scn_bvh, n_bytes_bvh));
+    checkCudaErrors(cudaMemcpy(scn_bvh, scn_bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
 
     BVH<Object> *obj;
     checkCudaErrors(cudaMallocManaged((void **)&obj, sizeof(BVH<Object>)));
-    *obj = BVH<Object>(scn, tri_bvhs.size(), bvh);
+    *obj = BVH<Object>(scn, tri_bvhs.size(), scn_bvh, scn_bvh_vec.size());
     
     Object **emt;
     checkCudaErrors(cudaMallocManaged((void **)&emt, n_bytes_emt));

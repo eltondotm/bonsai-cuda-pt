@@ -10,7 +10,7 @@ find_package(CUDAToolkit REQUIRED)
 
 add_subdirectory("ext/miniScene" EXCLUDE_FROM_ALL)
 
-set(MAIN "src/main.cpp")
+set(MAIN "src/main.cpp" "src/scene.cpp")
 set(RENDER "src/render/render_cpu.cpp" "src/render/render_kernel.cu")
 set(OBJECTS "src/objects/bvh_build.cpp")
 set(UTIL "src/util/random.cu")

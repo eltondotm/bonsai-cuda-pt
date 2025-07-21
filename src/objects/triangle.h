@@ -65,9 +65,9 @@ public:
         glm::vec3 norm;
         if (mesh->has_normals) {
             // Calculate normal from barycentric weights
-            glm::vec3 norm_a = mesh->normals[idx.r] * (1 - u - v);
-            glm::vec3 norm_b = mesh->normals[idx.s] * u;
-            glm::vec3 norm_c = mesh->normals[idx.t] * v;
+            glm::vec3 norm_a = mesh->normals[idx.x] * (1 - u - v);
+            glm::vec3 norm_b = mesh->normals[idx.y] * u;
+            glm::vec3 norm_c = mesh->normals[idx.z] * v;
             norm = norm_a + norm_b + norm_c;
         } else {
             // Default to plane normal (not smooth)

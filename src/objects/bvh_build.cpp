@@ -127,12 +127,12 @@ BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int coun
     }
 
     // Add the cost of the right child to costs
-    int count_above = 0;
+    int count_right = 0;
     Bounds bound_right;
     for (int i = n_buckets - 1; i > 0; --i) {
         bound_right.enclose(buckets[i].bbox);
-        count_above += buckets[i].count;
-        costs[i - 1] += count_above * bound_right.surface_area();
+        count_right += buckets[i].count;
+        costs[i - 1] += count_right * bound_right.surface_area();
     }
 
     // Find the best split
