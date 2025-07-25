@@ -9,7 +9,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/x64-release/Debug/pt.exe",
-            "args": ["-f", "assets/cbox-water.mini", "-s", "1", "--cpu"],
+            "args": ["-f", "assets/cbox.mini", "-s", "1", "--cpu"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

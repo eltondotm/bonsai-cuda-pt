@@ -10,9 +10,21 @@
 #include "util/random.h"
 #include "scene.h"
 
-#define MAX_BOUNCES 10
+#define MAX_BOUNCES 5
 #define LIGHT_SAMPLES 2
 #define EPS_F 0.0001f
+
+// Stores ray state for 
+struct alignas(64) RayData {
+    __device__ RayData() {}
+    __device__ RayData(Ray _ray, int _px) : ray(_ray), pixel_index(_px) {}
+
+    Ray ray;
+    glm::vec3 radiance   = glm::vec3(0.f);
+    glm::vec3 throughput = glm::vec3(1.f);
+    int bounces = 0;
+    int pixel_index = 0;
+};
 
 // Constructs a transformation matrix that rotates the input direction to (0, 1, 0)
 inline __host__ __device__ glm::mat4 rotate_to(glm::vec3 dir) {
@@ -35,7 +47,7 @@ __host__ __device__ glm::vec3 trace_ray(const Ray& r, const Scene& scene) {
     HitRecord rec;
 
     for (int i = 0; i < MAX_BOUNCES; ++i) {
-        if (geo->intersect(ray, rec)) {
+        if (geo->hit_if_if(ray, rec)) {
             //return rec.normal*0.5f+0.5f;  // Normal visualization
 
             // Transforming normal vector to (0, 1, 0) for easier material sampling
@@ -69,6 +81,97 @@ __host__ __device__ glm::vec3 trace_ray(const Ray& r, const Scene& scene) {
         }
     }  
     return radiance;
+}
+
+// Exact same function but using speculative traversal
+__device__ glm::vec3 trace_speculative(const Ray& r, const Scene& scene) {
+    Ray ray(r);
+    const BVH<Object> *geo = scene.geometry;
+    glm::vec3 radiance(0.0f);
+    glm::vec3 throughput(1.f);
+    HitRecord rec;
+
+    for (int i = 0; i < MAX_BOUNCES; ++i) {
+        if (geo->hit_speculative(ray, rec)) {
+            //return rec.normal*0.5f+0.5f;  // Normal visualization
+
+            // Transforming normal vector to (0, 1, 0) for easier material sampling
+            glm::mat4 normal_to_world = rotate_to(rec.normal);
+            glm::mat4 world_to_normal = glm::transpose(normal_to_world);
+            glm::vec3 wo = world_to_normal * glm::vec4(ray.d, 0.f);
+
+            // Sampling hit material
+            BSDFSample sample = sample_bsdf(*rec.material, wo);
+
+            if (i == 0 && sample.emission != glm::vec3(0.f))
+                return sample.emission;
+            radiance += sample.emission * throughput;
+
+            if (scene.n_emitters == 0)
+                radiance += glm::vec3(0.2f) * throughput;
+
+            // Create new ray
+            float cos_theta_i = sample.direction.y;
+            glm::vec3 wi = normal_to_world * glm::vec4(sample.direction, 0.f);
+            ray = Ray(rec.position, wi);
+            ray.o = ray.at(EPS_F);
+
+            throughput *= sample.attenuation / sample.pdf;
+            if (!is_discrete(*rec.material))
+                throughput *= cos_theta_i;
+            if (throughput == glm::vec3(0.f)) 
+                break;
+        } else {
+            break;
+        }
+    }  
+    return radiance;
+}
+
+// Carry out a single light bounce for methods that involves swapping rays between threads
+inline __device__ void trace(RayData& rd, const Scene& scene) {
+    if (rd.bounces == MAX_BOUNCES) {
+        rd.bounces = -1;  // Sentinel value for terminated ray
+        return;
+    }
+
+    HitRecord rec;
+    if (scene.geometry->hit_if_if(rd.ray, rec)) {
+        // Transforming normal vector to (0, 1, 0) for easier material sampling
+        glm::mat4 normal_to_world = rotate_to(rec.normal);
+        glm::mat4 world_to_normal = glm::transpose(normal_to_world);
+        glm::vec3 wo = world_to_normal * glm::vec4(rd.ray.d, 0.f);
+
+        // Sampling hit material
+        BSDFSample sample = sample_bsdf(*rec.material, wo);
+
+        if (rd.bounces == 0 && sample.emission != glm::vec3(0.f)) {
+            rd.radiance = sample.emission;
+            rd.bounces = -1;
+            return;
+        }
+
+        rd.radiance += sample.emission * rd.throughput;
+
+        if (scene.n_emitters == 0)
+            rd.radiance += glm::vec3(0.2f) * rd.throughput;
+
+        // Create new ray
+        float cos_theta_i = sample.direction.y;
+        glm::vec3 wi = normal_to_world * glm::vec4(sample.direction, 0.f);
+        rd.ray = Ray(rec.position, wi);
+        rd.ray.o = rd.ray.at(EPS_F);
+        rd.bounces++;
+
+        rd.throughput *= sample.attenuation / sample.pdf;
+        if (!is_discrete(*rec.material))
+            rd.throughput *= cos_theta_i;
+        if (rd.throughput == glm::vec3(0.f)) 
+            rd.bounces = -1;
+
+    } else {
+        rd.bounces = -1;
+    }
 }
 
 /* Monte Carlo with light sampling (not working)

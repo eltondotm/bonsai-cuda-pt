@@ -15,6 +15,8 @@
 
 void render    (int sx, int sy, int ns, glm::vec3 *out, Scene scene);
 void render_cpu(int sx, int sy, int ns, glm::vec3 *out, Scene scene);
+void render_speculative(int sx, int sy, int ns, glm::vec3 *out, Scene scene);
+void render_persistent (int sx, int sy, int ns, glm::vec3 *out, Scene scene);
 
 struct CameraParams {
     glm::vec3 pos;
@@ -145,13 +147,26 @@ int main(int argc, char *argv[]) {
         rng::init_device(nx, ny);
         checkCudaErrors(cudaDeviceSynchronize());
         clock_t t = clock();
-        std::cout << "Rendering on GPU... ";
+        std::cout << "Rendering on GPU with if-if traversal... ";
         render(nx, ny, ns, out, scene);
         checkCudaErrors(cudaDeviceSynchronize());
         t = clock() - t;
         std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";
 
         char *png = vec_to_byte(out, nx, ny);
+        std::cout << "Writing to " << output_path << std::endl;
+        write_png(write_filepath(output_path).c_str(), nx, ny, png);
+        delete[] png;
+
+        checkCudaErrors(cudaMemset(out, 0, nx*ny*sizeof(glm::vec3)));
+        t = clock();
+        std::cout << "Rendering on GPU with speculative traversal... ";
+        render_speculative(nx, ny, ns, out, scene);
+        checkCudaErrors(cudaDeviceSynchronize());
+        t = clock() - t;
+        std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";
+
+        png = vec_to_byte(out, nx, ny);
         std::cout << "Writing to " << output_path << std::endl;
         write_png(write_filepath(output_path).c_str(), nx, ny, png);
         delete[] png;

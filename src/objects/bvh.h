@@ -9,6 +9,8 @@
 #include "hit_record.h"
 #include "sphere.h"
 
+//#define DEBUG
+
 // Binary tree node for use in traversal
 struct alignas(32) BVHNode {
     Bounds bbox;
@@ -34,7 +36,7 @@ public:
     __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const { return false; }
 
     // Intersect is called on the top level BVH
-    __host__ __device__ bool intersect(const Ray& r, HitRecord& rec) const {
+    __host__ __device__ bool hit_if_if(const Ray& r, HitRecord& rec) const {
         bool hit = false;
 
         // Precomputing values for faster bbox intersection
@@ -48,10 +50,11 @@ public:
         BVH<Primitive> *root = const_cast<BVH<Primitive> *>(this);
 
         while (true) {
+            #ifdef DEBUG
             if (node_idx >= root->nnodes) {
-                printf("Out-of-bounds node index\n");
-                //break;
+                printf("Out of bounds node index.\n");
             }
+            #endif
             const BVHNode *node = &(root->bvh[node_idx]);
             if (node->bbox.intersect(r, inv_dir, dir_sign)) {
                 // Intersection with bounds, check node
@@ -60,13 +63,11 @@ public:
                     to_visit_idx--;
                     for (int i = 0; i < node->num_hitables; ++i) {
                         int prim_idx = node->start_idx + i;
+                        #ifdef DEBUG
                         if (prim_idx >= root->nprims) {
-                            #ifndef __CUDA_ARCH__
-                            //throw std::runtime_error("Out-of-bounds primitive index");
-                            #endif
-                            printf("Out-of-bounds primitive index\n");
-                            //break;
+                            printf("Out of bounds primitive index.\n");
                         }
+                        #endif
                         const Primitive &prim = root->prims[prim_idx];
                         if (const BVH<Primitive> *tree = cuda::std::get_if<BVH<Primitive>>(&(prim.underlying))) {
                             roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
@@ -75,14 +76,12 @@ public:
                             hit |= prim.hit(r, rec);
                         }
                     }
-                    // No intersection, move on to next node
                     if (to_visit_idx < 0)
                         break;  // Stack has been exhausted
                     node_idx = to_visit[to_visit_idx];
                     root = roots[to_visit_idx];
                 } else {
                     // Interior node, traverse to near node and put far on the stack
-                    //printf("Second child idx: %d\n", node->one_idx);
                     if (dir_sign[node->axis]) {
                         roots[to_visit_idx] = root;
                         to_visit[to_visit_idx++] = node_idx + 1;
@@ -100,7 +99,155 @@ public:
                 root = roots[to_visit_idx];
             }
         }
-        return hit; 
+        return hit;
+    }
+
+    __host__ __device__ bool hit_while_while(const Ray& r, HitRecord& rec) const {
+        bool hit = false;
+
+        // Precomputing values for faster bbox intersection
+        glm::vec3 inv_dir = 1.f / r.d;
+        int dir_sign[3] = {int(inv_dir.x < 0), int(inv_dir.y < 0), int(inv_dir.z < 0)};
+
+        int to_visit[64];      // Stack of nodes waiting to be checked
+        BVH<Primitive> *roots[64];    // Stack of roots that ^ indexes.
+        int to_visit_idx = 0;  // Current position in the stack
+        int node_idx = 0;      // Index of the BVH node to check
+        BVH<Primitive> *root = const_cast<BVH<Primitive> *>(this);
+
+        while (true) {
+            #ifdef DEBUG
+            if (node_idx >= root->nnodes) {
+                printf("Out of bounds node index.\n");
+            }
+            #endif
+            // while current node is an interior node, traverse to next node
+            const BVHNode *node = &(root->bvh[node_idx]);
+            while (node->num_hitables == 0) {
+                if (node->bbox.intersect(r, inv_dir, dir_sign)) {
+                    if (dir_sign[node->axis]) {
+                        roots[to_visit_idx] = root;
+                        to_visit[to_visit_idx++] = node_idx + 1;
+                        node_idx = node->one_idx;
+                    } else {
+                        roots[to_visit_idx] = root;
+                        to_visit[to_visit_idx++] = node->one_idx;
+                        node_idx = node_idx + 1;
+                    }
+                } else {
+                    if (--to_visit_idx < 0)
+                        return hit;
+                    node_idx = to_visit[to_visit_idx];
+                    root = roots[to_visit_idx];
+                }
+                node = &(root->bvh[node_idx]);
+            }
+            // while node has triangles to test, perform intersection test
+            to_visit_idx--;
+            int prim_offset = 0;
+            do {
+                int prim_idx = node->start_idx + prim_offset;
+                #ifdef DEBUG
+                if (prim_idx >= root->nprims) {
+                    printf("Out of bounds primitive index.\n");
+                }
+                #endif
+                const Primitive &prim = root->prims[prim_idx];
+                if (const BVH<Primitive> *tree = cuda::std::get_if<BVH<Primitive>>(&(prim.underlying))) {
+                    roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
+                    to_visit[to_visit_idx] = 0;
+                } else {
+                    hit |= prim.hit(r, rec);
+                }
+                ++prim_offset;
+            } while (prim_offset < node->num_hitables);
+            if (to_visit_idx < 0)
+                return hit;  // Stack has been exhausted
+            node_idx = to_visit[to_visit_idx];
+            root = roots[to_visit_idx];
+        }
+        return hit;
+    }
+
+    __device__ bool hit_speculative(const Ray& r, HitRecord& rec) const {
+        bool hit = false;
+
+        // Precomputing values for faster bbox intersection
+        glm::vec3 inv_dir = 1.f / r.d;
+        int dir_sign[3] = {int(inv_dir.x < 0), int(inv_dir.y < 0), int(inv_dir.z < 0)};
+
+        int to_visit[64];      // Stack of nodes waiting to be checked
+        BVH<Primitive> *roots[64];    // Stack of roots that ^ indexes.
+        int to_visit_idx = 0;  // Current position in the stack
+        int node_idx = 0;      // Index of the BVH node to check
+        BVH<Primitive> *root = const_cast<BVH<Primitive> *>(this);
+
+        const BVHNode *leaf = nullptr;  // Buffered leaf node for speculative traversal
+
+        while (true) {
+            #ifdef DEBUG
+            if (node_idx >= root->nnodes) {
+                printf("Out of bounds node index.\n");
+            }
+            #endif
+            // while current node is an interior node, traverse to next node
+            const BVHNode *node = &(root->bvh[node_idx]);
+            if (node->num_hitables == 0) {
+                if (node->bbox.intersect(r, inv_dir, dir_sign)) {
+                    if (dir_sign[node->axis]) {
+                        roots[to_visit_idx] = root;
+                        to_visit[to_visit_idx++] = node_idx + 1;
+                        node_idx = node->one_idx;
+                    } else {
+                        roots[to_visit_idx] = root;
+                        to_visit[to_visit_idx++] = node->one_idx;
+                        node_idx = node_idx + 1;
+                    }
+                } else {
+                    if (--to_visit_idx < 0)
+                        return hit;
+                    node_idx = to_visit[to_visit_idx];
+                    root = roots[to_visit_idx];
+                }
+                node = &(root->bvh[node_idx]);
+            }
+            
+            if (node->num_hitables != 0 && !leaf) {
+                leaf = node;
+                node_idx--;
+            }
+
+            // wait until all threads have a leaf for intersection
+            if (__any_sync(__activemask(), !leaf))
+                continue;        
+
+            // while node has triangles to test, perform intersection test
+            to_visit_idx--;
+            int prim_offset = 0;
+            do {
+                int prim_idx = leaf->start_idx + prim_offset;
+                #ifdef DEBUG
+                if (prim_idx >= root->nprims) {
+                    printf("Out of bounds primitive index.\n");
+                }
+                #endif
+                const Primitive &prim = root->prims[prim_idx];
+                if (const BVH<Primitive> *tree = cuda::std::get_if<BVH<Primitive>>(&(prim.underlying))) {
+                    roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
+                    to_visit[to_visit_idx] = 0;
+                } else {
+                    hit |= prim.hit(r, rec);
+                }
+                ++prim_offset;
+            } while (prim_offset < node->num_hitables);
+            leaf = nullptr;
+
+            if (to_visit_idx < 0)
+                return hit;  // Stack has been exhausted
+            node_idx = to_visit[to_visit_idx];
+            root = roots[to_visit_idx];
+        }
+        return hit;
     }
 
     // Left public to allow deallocating externally

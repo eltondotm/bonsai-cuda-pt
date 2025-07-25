@@ -45,6 +45,8 @@ using Material = cuda::std::variant<Lambertian, Metallic, Glass, Emissive>;
 
 __host__ __device__ BSDFSample sample_bsdf(const Material& m, glm::vec3 wo);
 
+__host__ __device__ bool is_discrete(const Material& m);
+
 #ifdef __CUDACC__
 // Faster reflect than glm since normal vector is always (0, 1, 0)
 inline __host__ __device__ glm::vec3 reflect(glm::vec3 dir) {
