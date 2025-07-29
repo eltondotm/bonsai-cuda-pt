@@ -214,7 +214,7 @@ public:
             
             if (node->num_hitables != 0 && !leaf) {
                 leaf = node;
-                node_idx--;
+                to_visit_idx--;
             }
 
             // wait until all threads have a leaf for intersection
@@ -222,7 +222,6 @@ public:
                 continue;        
 
             // while node has triangles to test, perform intersection test
-            to_visit_idx--;
             int prim_offset = 0;
             do {
                 int prim_idx = leaf->start_idx + prim_offset;

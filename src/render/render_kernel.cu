@@ -1,4 +1,6 @@
 
+#include <cooperative_groups.h>
+
 #include <glm/vec3.hpp>
 
 #include "util/cuda_errors.h"
@@ -77,7 +79,7 @@ void render_speculative(int sx, int sy, int ns, glm::vec3 *out, Scene scene) {
 // PERSISTENT THREADS
 /////////////////////////////
 
-#define SM_COUNT 48
+#define SM_COUNT 46
 #define WARP_SIZE 32
 #define WARPS_PER_SM 48
 #define BLOCK_SIZE 256
@@ -88,6 +90,8 @@ void render_speculative(int sx, int sy, int ns, glm::vec3 *out, Scene scene) {
 
 #define FULL_MASK 0xFFFFFFFF
 
+using cooperative_groups::details::lanemask32_lt;
+
 __constant__ int d_queue_length;
 __device__   int d_queue_index = 0;
 
@@ -96,6 +100,8 @@ __global__ void d_init_work_queue(int sx, int sy, RayData *queue, Scene scene) {
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     if (i >= sx || j >= sy) return;
     int pixel_index = j*sx + i;
+
+    if (i == 0 && j == 0) d_queue_index = 0;
 
     glm::vec2 coords((float)i,  (float)j );
     glm::vec2 dims  ((float)sx, (float)sy);
@@ -106,65 +112,54 @@ __global__ void d_init_work_queue(int sx, int sy, RayData *queue, Scene scene) {
     queue[pixel_index] = RayData(r, pixel_index);
 }
 
-// Test to make sure the ray queue is functional
-__global__ void d_render_persistent_debug(int sx, int sy, RayData *queue, glm::vec3 *out, Scene scene) {
-    int i = threadIdx.x + blockIdx.x * blockDim.x;
-    int j = threadIdx.y + blockIdx.y * blockDim.y;
-    if (i >= sx || j >= sy) return;
-    int pixel_index = j*sx + i;
+inline __device__ RayData init_ray(int w, int h, int index, Camera *cam) {
+    int x = index % w;
+    int y = index / w;
 
-    RayData& rd = queue[pixel_index];
-    while (rd.bounces != -1) {
-        trace(rd, scene);
-        /* Print debugging
-        if (i == 300 && j == 300) {
-            glm::vec3 val = rd.radiance;
-            printf("%f, %f, %f, %d\n", val.r, val.g, val.b, rd.bounces);
-        } */
-    }
-    out[pixel_index] += queue[pixel_index].radiance;
+    glm::vec2 coords((float)x, (float)y);
+    glm::vec2 dims  ((float)w, (float)h);
+
+    glm::vec2 uv = (coords + rng::square()) / dims;
+    Ray r = cam->generate_ray(uv);
+
+    return RayData(r, index);
 }
 
-// Adapted from Aila and Laine
-__global__ void d_render_persistent(RayData *queue, glm::vec3 *out, Scene scene) {
-    // Arrays for full block, one value per warp
-    __shared__ volatile int next_ray_arr[BLOCKDIM_Y];
-    __shared__ volatile int ray_count_arr[BLOCKDIM_Y];
-    if (threadIdx.x == 0)
-        ray_count_arr[threadIdx.y] = 0;
+__global__ void d_render_persistent(int w, int h, glm::vec3 *out, Scene scene) {
+    // Reset global counter
+    if (blockIdx.x == 0 && threadIdx.x == 0 && blockIdx.y == 0 && threadIdx.y == 0)
+        d_queue_index = 0;
+    
+    int i;  // Current ray index
 
+    // Fetch initial rays
+    unsigned int mask = __activemask();
+    unsigned int rays_needed = __popc(mask);
+    unsigned int rank = __popc(mask & lanemask32_lt());
+    int representative = __ffs(mask) - 1;
+    if (rank == 0) {
+        i = atomicAdd(&d_queue_index, rays_needed);
+    }
+    i = __shfl_sync(mask, i, representative) + rank;
 
-    volatile int& local_next_ray = next_ray_arr[threadIdx.y];
-    volatile int& local_ray_count = ray_count_arr[threadIdx.y];
-
-    while (true) {
-        // Fetch new rays if local rays depleted
-        if (local_ray_count == 0 && threadIdx.x == 0) {
-            local_next_ray = atomicAdd(&d_queue_index, BATCH_SIZE);
-            local_ray_count = BATCH_SIZE;
-        }
-        // Fetch next local ray
-        int ray_index = (local_next_ray + threadIdx.x) % d_queue_length;
-
-        // Return if the entire batch is already terminated
-        // Ideally, some sorting of the queue would ensure this only happens at the very end
-        RayData& rd = queue[ray_index];
-
-        if (__all_sync(FULL_MASK, rd.bounces == -1))
-            return;
-
-        if (threadIdx.x == 0) {
-            local_next_ray += WARP_SIZE;
-            local_ray_count -= WARP_SIZE;
+    RayData rd = init_ray(w, h, i, scene.camera);
+    while (i < d_queue_length) {
+        trace(rd, scene);
+        if (rd.bounces == -1) {
+            out[rd.pixel_index] += rd.radiance;
         }
 
-        // Trace a single bounce and update ray state
-        if (rd.bounces != -1) {
-            trace(queue[ray_index], scene);
-            if (rd.bounces == -1) {
-                out[rd.pixel_index] += rd.radiance;
-            }  
-        }   
+        // Fetch more rays if needed
+        unsigned int terminated = __ballot_sync(__activemask(), rd.bounces == -1);
+        if (rd.bounces == -1) {
+            unsigned int rank = __popc(terminated & lanemask32_lt());
+            int rays_needed = __popc(terminated);
+            int representative = __ffs(terminated) - 1;
+            if (rank == 0)
+                i = atomicAdd(&d_queue_index, rays_needed);
+            i = __shfl_sync(terminated, i, representative) + rank;
+            rd = init_ray(w, h, i, scene.camera);
+        }
     }
 }
 
@@ -190,13 +185,10 @@ void render_persistent(int sx, int sy, int ns, glm::vec3 *out, Scene scene) {
     dim3 img_threads(16, 16);
     dim3 img_blocks((sx+img_threads.x-1) / img_threads.x, (sy+img_threads.y-1) / img_threads.y);
     for (int i = 0; i < ns; ++i) {
-        d_init_work_queue<<<img_blocks, img_threads>>>(sx, sy, queue, scene);
-        checkCudaErrors(cudaDeviceSynchronize());
-
         // Launching enought threads for full occupancy
         dim3 threads(BLOCKDIM_X, BLOCKDIM_Y);
         dim3 blocks(SM_COUNT * WARPS_PER_SM * WARP_SIZE / BLOCK_SIZE);
-        d_render_persistent<<<blocks, threads>>>(queue, out, scene);
+        d_render_persistent<<<blocks, threads>>>(sx, sy, out, scene);
         //d_render_persistent_debug<<<img_blocks, img_threads>>>(sx, sy, queue, out, scene);
         checkCudaErrors(cudaDeviceSynchronize());
     }

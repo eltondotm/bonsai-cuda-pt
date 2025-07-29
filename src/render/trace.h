@@ -10,7 +10,7 @@
 #include "util/random.h"
 #include "scene.h"
 
-#define MAX_BOUNCES 5
+#define MAX_BOUNCES 10
 #define LIGHT_SAMPLES 2
 #define EPS_F 0.0001f
 
@@ -47,7 +47,7 @@ __host__ __device__ glm::vec3 trace_ray(const Ray& r, const Scene& scene) {
     HitRecord rec;
 
     for (int i = 0; i < MAX_BOUNCES; ++i) {
-        if (geo->hit_if_if(ray, rec)) {
+        if (geo->hit_while_while(ray, rec)) {
             //return rec.normal*0.5f+0.5f;  // Normal visualization
 
             // Transforming normal vector to (0, 1, 0) for easier material sampling

@@ -82,37 +82,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Basic sphere scene for testing
-    // std::vector<Object> prm_vec;
-    // for (int j = 0; j < 2; ++j) {
-    //     float z = 0.5f - (float)j;
-    //     for (int i = 0; i < 2; ++i) {
-    //         float x = 0.5f - (float)i;
-    //         prm_vec.push_back(Object(Sphere(0.5f, glm::vec3(x, 0.f, z))));
-    //     }
-    // }
-
-    // std::vector<BVHNode> bvh_vec = build_bvh(prm_vec, SAH);
-
-    // // Convert to arrays to send to device
-    // int n_bytes_obj = prm_vec.size()*sizeof(Object);
-    // int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
-
-    // Object *prm;
-    // checkCudaErrors(cudaMallocManaged((void **)&prm, n_bytes_obj));
-    // checkCudaErrors(cudaMemcpy(prm, prm_vec.data(), n_bytes_obj, cudaMemcpyHostToDevice));
-
-    // BVHNode *bvh;
-    // checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
-    // checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
-
-    // BVH<Object> *obj;
-    // checkCudaErrors(cudaMallocManaged((void **)&obj, sizeof(BVH<Object>)));
-    // *obj = BVH<Object>(prm, prm_vec.size(), bvh, bvh_vec.size());
-
-    // Scene scene;
-    // scene.geometry = obj;
-
     clock_t t = clock();
     std::cout << "Building BVH... ";
     Scene scene = create_scene(scene_path);
@@ -147,7 +116,7 @@ int main(int argc, char *argv[]) {
         rng::init_device(nx, ny);
         checkCudaErrors(cudaDeviceSynchronize());
         clock_t t = clock();
-        std::cout << "Rendering on GPU with if-if traversal... ";
+        std::cout << "Rendering on GPU with while-while... ";
         render(nx, ny, ns, out, scene);
         checkCudaErrors(cudaDeviceSynchronize());
         t = clock() - t;
@@ -158,17 +127,18 @@ int main(int argc, char *argv[]) {
         write_png(write_filepath(output_path).c_str(), nx, ny, png);
         delete[] png;
 
+        rng::init_device(nx, ny);
         checkCudaErrors(cudaMemset(out, 0, nx*ny*sizeof(glm::vec3)));
         t = clock();
-        std::cout << "Rendering on GPU with speculative traversal... ";
-        render_speculative(nx, ny, ns, out, scene);
+        std::cout << "Rendering on GPU with persistent threads... ";
+        render_persistent(nx, ny, ns, out, scene);
         checkCudaErrors(cudaDeviceSynchronize());
         t = clock() - t;
         std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";
 
         png = vec_to_byte(out, nx, ny);
-        std::cout << "Writing to " << output_path << std::endl;
-        write_png(write_filepath(output_path).c_str(), nx, ny, png);
+        std::cout << "Writing to persistent.png" << std::endl;
+        write_png(write_filepath("persistent.png").c_str(), nx, ny, png);
         delete[] png;
         rng::cleanup_device();
     }
