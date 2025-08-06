@@ -1,6 +1,5 @@
 
-#ifndef SPHEREH
-#define SPHEREH
+#pragma once
 
 #include <cuda_runtime.h>
 #include <cuda/std/utility>
@@ -11,21 +10,20 @@
 class Sphere {
 public:
     __host__ __device__ Sphere() 
-        : radius(1.f), center(0.f) { 
+        : radius(1.f) { 
     }
-    __host__ __device__ Sphere(float _radius, const glm::vec3& _center) 
-        : radius(_radius), center(_center) {
+    __host__ __device__ Sphere(float _radius) 
+        : radius(_radius) {
     }
 
     __host__ __device__ Bounds bounds() const { 
-        return Bounds(glm::vec3(-radius) + center, glm::vec3(radius) + center);
+        return Bounds(glm::vec3(-radius), glm::vec3(radius));
     }
     
     __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const {
-        glm::vec3 oc = r.o - center;
         float a = 1.f;
-        float b = 2.f * glm::dot(oc, r.d);
-        float c = glm::dot(oc, oc) - (radius * radius);
+        float b = 2.f * glm::dot(r.o, r.d);
+        float c = glm::dot(r.o, r.o) - (radius * radius);
 
         float discriminant = (b * b) - (4.f * a * c);
         if (discriminant < 0) return false;
@@ -47,16 +45,11 @@ public:
         r.max_t = t0;
 
         rec.position = r.at(t0);
-        rec.normal = glm::normalize(rec.position - center);
+        rec.normal = glm::normalize(rec.position);
         rec.time = t0;
-        rec.material = const_cast<Material *>(&mat);
         return true;
     }
 
 private:
     float radius;
-    glm::vec3 center;
-    Material mat = Material(Lambertian{glm::vec3(1.f)});
 };
-
-#endif

@@ -25,11 +25,31 @@ struct alignas(32) BVHNode {
 template<typename Primitive> class BVH {
 public:
     __host__ __device__ BVH(Primitive *_prims, int _nprims, BVHNode *_bvh, int _nnodes) 
-        : prims(_prims), nprims(_nprims), bvh(_bvh), nnodes(_nnodes) {
+        : prims(_prims), nprims(_nprims), bvh(_bvh), nnodes(_nnodes), trans(glm::mat4(1.f)) {
+    }
+    __host__ __device__ BVH(Primitive *_prims, int _nprims, BVHNode *_bvh, int _nnodes,
+                            Material _mat, glm::mat4 _trans) 
+        : prims(_prims), nprims(_nprims), bvh(_bvh), nnodes(_nnodes), mat(_mat), trans(_trans) {
     }
 
     __host__ __device__ Bounds bounds() const {
-        return bvh[0].bbox;
+        Bounds b = bvh[0].bbox;
+        //b.transform(trans);
+        return b;
+    }
+
+    // Leaf node intersection with transformation
+    inline __host__ __device__ bool hit_leaf(const Primitive& prim, const Ray& r, HitRecord& rec, const BVH<Primitive> *root) const {
+        Ray r_local(r);
+        //r_local.transform(root->trans);
+        bool hit = prim.hit(r_local, rec);
+
+        if (hit) {
+            //rec.transform(trans, glm::transpose(root->itrans), r.o);
+            r.max_t = rec.time;
+            rec.material = const_cast<Material *>(&root->mat);
+        }
+        return hit;
     }
 
     // Hit should not be called on BVHs -- only included to satisfy the object interface
@@ -73,7 +93,7 @@ public:
                             roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
                             to_visit[to_visit_idx] = 0;
                         } else {
-                            hit |= prim.hit(r, rec);
+                            hit |= hit_leaf(prim, r, rec, root);
                         }
                     }
                     if (to_visit_idx < 0)
@@ -82,7 +102,7 @@ public:
                     root = roots[to_visit_idx];
                 } else {
                     // Interior node, traverse to near node and put far on the stack
-                    if (dir_sign[node->axis]) {
+                    if (r.d[node->axis] < 0) {
                         roots[to_visit_idx] = root;
                         to_visit[to_visit_idx++] = node_idx + 1;
                         node_idx = node->one_idx;
@@ -125,7 +145,7 @@ public:
             const BVHNode *node = &(root->bvh[node_idx]);
             while (node->num_hitables == 0) {
                 if (node->bbox.intersect(r, inv_dir, dir_sign)) {
-                    if (dir_sign[node->axis]) {
+                    if (r.d[node->axis] < 0) {
                         roots[to_visit_idx] = root;
                         to_visit[to_visit_idx++] = node_idx + 1;
                         node_idx = node->one_idx;
@@ -157,7 +177,7 @@ public:
                     roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
                     to_visit[to_visit_idx] = 0;
                 } else {
-                    hit |= prim.hit(r, rec);
+                    hit |= hit_leaf(prim, r, rec, root);
                 }
                 ++prim_offset;
             } while (prim_offset < node->num_hitables);
@@ -194,7 +214,7 @@ public:
             const BVHNode *node = &(root->bvh[node_idx]);
             if (node->num_hitables == 0) {
                 if (node->bbox.intersect(r, inv_dir, dir_sign)) {
-                    if (dir_sign[node->axis]) {
+                    if (r.d[node->axis] < 0) {
                         roots[to_visit_idx] = root;
                         to_visit[to_visit_idx++] = node_idx + 1;
                         node_idx = node->one_idx;
@@ -235,7 +255,7 @@ public:
                     roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
                     to_visit[to_visit_idx] = 0;
                 } else {
-                    hit |= prim.hit(r, rec);
+                    hit |= hit_leaf(prim, r, rec, root);
                 }
                 ++prim_offset;
             } while (prim_offset < node->num_hitables);
@@ -254,4 +274,8 @@ public:
     BVHNode *bvh;
     int nprims;
     int nnodes;
+
+    Material mat;
+    glm::mat4 trans;
+    glm::mat4 itrans;
 };

@@ -10,6 +10,7 @@
 #include "hit_record.h"
 #include "sphere.h"
 #include "triangle.h"
+#include "square.h"
 #include "object_list.h"
 #include "bvh.h"
 
@@ -21,8 +22,8 @@ public:
     __host__ __device__ Object(Triangle&& tri)
         : underlying(cuda::std::move(tri)) {  
     }
-    __host__ __device__ Object(List<Object>&& list)
-        : underlying(cuda::std::move(list)) {
+    __host__ __device__ Object(Square&& square)
+        : underlying(cuda::std::move(square)) {
     }
     __host__ __device__ Object(BVH<Object>&& bvh)
         : underlying(cuda::std::move(bvh)) {
@@ -40,5 +41,5 @@ public:
         }, underlying);
     }
     
-    cuda::std::variant<Sphere, Triangle, List<Object>, BVH<Object>> underlying;
+    cuda::std::variant<Triangle, Sphere, Square, BVH<Object>> underlying;
 };

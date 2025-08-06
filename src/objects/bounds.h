@@ -106,7 +106,7 @@ public:
                 if (t0 < t_far ) t_far  = t0;
             }
 
-            if (t_far <= t_near)
+            if (t_far < t_near)
                 return false;
         }
         return true;

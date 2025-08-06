@@ -16,8 +16,6 @@
 struct TriangleMesh {
     glm::vec3 *vertices;
     glm::vec3 *normals;
-    Material   material;
-
     bool has_normals = false;
 };
 
@@ -77,7 +75,6 @@ public:
         rec.position = r.at(t);
         rec.normal = norm;
         rec.time = t;
-        rec.material = &mesh->material;
         return true;
     }
 

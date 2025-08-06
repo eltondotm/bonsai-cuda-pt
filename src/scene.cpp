@@ -9,6 +9,24 @@
 std::string read_filepath(const char *filename);
 std::string write_filepath(const char *filename);
 
+BVH<Object> construct_primitive(Object& prim, const Material& mat, const glm::mat4& trans) {
+    std::vector<Object> prm_vec{prim};
+    std::vector<BVHNode> bvh_vec = build_bvh(prm_vec, SAH);
+
+    int n_bytes_prm = prm_vec.size()*sizeof(Object);
+    int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
+
+    Object *prm;
+    checkCudaErrors(cudaMallocManaged((void **)&prm, n_bytes_prm));
+    checkCudaErrors(cudaMemcpy(prm, prm_vec.data(), n_bytes_prm, cudaMemcpyHostToDevice));
+
+    BVHNode *bvh;
+    checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
+    checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
+
+    return BVH<Object>(prm, prm_vec.size(), bvh, bvh_vec.size(), mat, trans);
+}
+
 // Util functions for converting between miniScene and glm
 inline glm::vec3 mini_to_vec3(mini::vec3f mini) { return glm::vec3(mini.x, mini.y, mini.z); }
 inline glm::ivec3 mini_to_ivec3(mini::vec3i mini) { return glm::ivec3(mini.r, mini.s, mini.t); }
@@ -58,11 +76,12 @@ Scene create_scene(const char *filename) {
 
         TriangleMesh *tri_mesh;
         checkCudaErrors(cudaMallocManaged((void**)&tri_mesh, sizeof(TriangleMesh)));
-        *tri_mesh = TriangleMesh{verts, norms, material, !mesh->normals.empty()};
+        *tri_mesh = TriangleMesh{verts, norms, !mesh->normals.empty()};
 
         std::vector<Object> tri_vec;
         for (int i = 0; i < mesh->getNumPrims(); ++i) {
-            tri_vec.push_back(Object(Triangle(tri_mesh, mini_to_ivec3(mesh->indices[i]))));
+            Triangle tri = Triangle(tri_mesh, mini_to_ivec3(mesh->indices[i]));
+            tri_vec.push_back(Object(std::move(tri)));
         }
 
         // BVH construction
@@ -79,7 +98,7 @@ Scene create_scene(const char *filename) {
         checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
         checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
 
-        tri_bvhs.push_back(BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size()));
+        tri_bvhs.emplace_back(BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size(), material, glm::mat4(1.f)));
 
         if (const Emissive *e = cuda::std::get_if<Emissive>(&material)) {
             for (int i = 0; i < tri_vec.size(); ++i) {

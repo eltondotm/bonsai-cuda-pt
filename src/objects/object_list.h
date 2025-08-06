@@ -6,6 +6,7 @@
 #include "bounds.h"
 #include "hit_record.h"
 
+// Not used for now
 template<typename Primitive> class List {
 public:
     __host__ __device__ List(Primitive *_prims, int _nprims) 
