@@ -60,10 +60,26 @@ public:
     }
 
     __host__ __device__ void transform(const glm::mat4& trans) {
-        glm::vec3 a = glm::vec3(trans * glm::vec4(p_min, 1.f));
-        glm::vec3 b = glm::vec3(trans * glm::vec4(p_max, 1.f));
-        p_min = glm::vec3(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z));
-        p_max = glm::vec3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z));
+        glm::vec3 a_min = p_min, a_max = p_max;
+        // xyz translation values
+        p_min = p_max = glm::vec3(trans[3][0], trans[3][1], trans[3][2]);
+        for(int i = 0; i < 3; i++) {
+            for(int j = 0; j < 3; j++) {
+                float a = trans[j][i] * a_min[j];
+                float b = trans[j][i] * a_max[j];
+                if(a < b) {
+                    p_min[i] += a;
+                    p_max[i] += b;
+                } else {
+                    p_min[i] += b;
+                    p_max[i] += a;
+                }
+            }
+        }
+        // glm::vec3 a = glm::vec3(trans * glm::vec4(p_min, 1.f));
+        // glm::vec3 b = glm::vec3(trans * glm::vec4(p_max, 1.f));
+        // p_min = glm::vec3(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z));
+        // p_max = glm::vec3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z));
     }
 
     // Any degenerate dimensions will not be normalized

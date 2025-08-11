@@ -9,24 +9,6 @@
 std::string read_filepath(const char *filename);
 std::string write_filepath(const char *filename);
 
-BVH<Object> construct_primitive(Object& prim, const Material& mat, const glm::mat4& trans) {
-    std::vector<Object> prm_vec{prim};
-    std::vector<BVHNode> bvh_vec = build_bvh(prm_vec, SAH);
-
-    int n_bytes_prm = prm_vec.size()*sizeof(Object);
-    int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
-
-    Object *prm;
-    checkCudaErrors(cudaMallocManaged((void **)&prm, n_bytes_prm));
-    checkCudaErrors(cudaMemcpy(prm, prm_vec.data(), n_bytes_prm, cudaMemcpyHostToDevice));
-
-    BVHNode *bvh;
-    checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
-    checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
-
-    return BVH<Object>(prm, prm_vec.size(), bvh, bvh_vec.size(), mat, trans);
-}
-
 // Util functions for converting between miniScene and glm
 inline glm::vec3 mini_to_vec3(mini::vec3f mini) { return glm::vec3(mini.x, mini.y, mini.z); }
 inline glm::ivec3 mini_to_ivec3(mini::vec3i mini) { return glm::ivec3(mini.r, mini.s, mini.t); }

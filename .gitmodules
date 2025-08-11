@@ -1,3 +1,6 @@
 [submodule "ext/miniScene"]
 	path = ext/miniScene
 	url = https://github.com/ingowald/miniScene.git
+[submodule "ext/TinyParser-Mitsuba"]
+	path = ext/TinyParser-Mitsuba
+	url = https://github.com/PearCoding/TinyParser-Mitsuba.git

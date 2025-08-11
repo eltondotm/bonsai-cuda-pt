@@ -17,7 +17,7 @@ public:
         looking_at(0.f, 0.f, 0.f),
         rotation(glm::vec3(0.f)),
         radius(5.f),
-        vfov(90.f),
+        vfov(45.f),
         aspect(1.7778f),
         aperture(0.f),
         focal_dist(5.f) {
@@ -30,9 +30,14 @@ public:
         glm::vec2 view_dim = glm::vec2(w_view, h_view);
         glm::vec2 view_dir = (uv - 0.5f) * view_dim;
 
-        Ray r = Ray(glm::vec3(0.f), glm::vec3(view_dir, -1.0f));
+        Ray r = Ray(glm::vec3(0.f), glm::vec3(view_dir, 1.0f));
         r.transform(iview);
         return r;
+    }
+
+    __host__ __device__ void set_view(glm::mat4 to_world) {
+        iview = to_world;
+        view = glm::inverse(iview);
     }
 
     __host__ __device__ void view_update() {

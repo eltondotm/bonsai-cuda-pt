@@ -12,6 +12,7 @@
 #include "util/image.h"
 #include "util/file.h"
 #include "scene.h"
+#include "mitsuba_scene.h"
 
 void render    (int sx, int sy, int ns, glm::vec3 *out, Scene scene);
 void render_cpu(int sx, int sy, int ns, glm::vec3 *out, Scene scene);
@@ -84,7 +85,8 @@ int main(int argc, char *argv[]) {
 
     clock_t t = clock();
     std::cout << "Building BVH... ";
-    Scene scene = create_scene(scene_path);
+    Scene scene = create_mitsuba_scene(scene_path);
+    //Scene scene = create_scene(scene_path);
     t = clock() - t;
     std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";
 
@@ -96,14 +98,16 @@ int main(int argc, char *argv[]) {
     if (camera_defaults.find(scene_path) != camera_defaults.end())
         cam_params = camera_defaults.at(scene_path);
 
-    Camera *cam;
-    checkCudaErrors(cudaMallocManaged((void **)&cam, sizeof(Camera)));
-    *cam = Camera();
-    cam->set_fov(45.f);
-    cam->set_aspect((float)nx/ny);
-    cam->look_at(cam_params.pos, cam_params.target);
+    // Camera *cam;
+    // checkCudaErrors(cudaMallocManaged((void **)&cam, sizeof(Camera)));
+    // *cam = Camera();
+    // cam->set_fov(45.f);
+    // cam->set_aspect((float)nx/ny);
+    // cam->look_at(cam_params.pos, cam_params.target);
     
-    scene.camera = cam;
+    // scene.camera = cam;
+
+    scene.camera->set_aspect((float)nx/ny);
 
     // Non-accelerated list for testing
     #if 0

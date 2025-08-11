@@ -5,6 +5,7 @@ project ("bonsai-cuda-pt" LANGUAGES CXX CUDA)
 find_package(CUDAToolkit REQUIRED)
 
 add_subdirectory("ext/miniScene" EXCLUDE_FROM_ALL)
+add_subdirectory("ext/TinyParser-Mitsuba" EXCLUDE_FROM_ALL)
 
 set(MAIN "src/main.cpp" "src/scene.cpp")
 set(RENDER "src/render/render_cpu.cpp" "src/render/render_kernel.cu")
@@ -28,10 +29,11 @@ target_include_directories(pt PRIVATE
   "src" 
   "ext"
   "ext/miniScene"
+  "ext/TinyParser-Mitsuba/include"
   "src/render"
   "src/objects"
   "src/rays" 
   "${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}"
 )
 
-target_link_libraries(pt PRIVATE CUDA::cudart_static curand.lib miniScene)
+target_link_libraries(pt PRIVATE CUDA::cudart_static curand.lib miniScene tinyparser_mitsuba)
