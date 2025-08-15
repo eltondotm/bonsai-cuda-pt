@@ -5,7 +5,7 @@
 #include "bvh_build.h"
 #include "object.h"
 
-BVH<Object> construct_cube(const Material& mat, const glm::mat4& trans) {
+BVH<Object> construct_cube(unsigned int mat_idx, const glm::mat4& trans) {
     constexpr glm::vec3 vertices[24] = {
         {  1, -1, -1 }, {  1, -1,  1 }, { -1, -1,  1 }, { -1, -1, -1 },
         {  1,  1, -1 }, { -1,  1, -1 }, { -1,  1,  1 }, {  1,  1,  1 },
@@ -42,7 +42,7 @@ BVH<Object> construct_cube(const Material& mat, const glm::mat4& trans) {
 
     std::vector<Object> tri_vec;
     for (int i = 0; i < 12; ++i) {
-        tri_vec.push_back(Object(Triangle(tri_mesh, triangles[i])));
+        tri_vec.push_back(Object(Triangle(tri_mesh, triangles[i]), mat_idx, trans));
     }
 
     std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH);
@@ -58,5 +58,50 @@ BVH<Object> construct_cube(const Material& mat, const glm::mat4& trans) {
     checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
     checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
 
-    return BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size(), mat, trans);
+    return BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size());
+}
+
+BVH<Object> construct_square(unsigned int mat_idx, const glm::mat4& trans) {
+    constexpr glm::vec3 vertices[4] = {
+        { 1,  0, -1 }, { 1,  0,  1 }, { -1,  0,  1 }, { -1, 0, -1 }
+    };
+    constexpr glm::vec3 normals[4] = {
+        { 0, 1, 0 }, { 0, 1, 0 }, { 0, 1, 0 }, { 0, 1, 0 }
+    };
+    constexpr glm::ivec3 triangles[2] = {
+        {  0,  1,  2 }, {  3,  0,  2 }
+    };
+
+    glm::vec3 *verts;
+    glm::vec3 *norms;
+    int v_size = 4*sizeof(glm::vec3);
+    int n_size = 4*sizeof(glm::vec3);
+    checkCudaErrors(cudaMallocManaged((void **)&verts, v_size));
+    checkCudaErrors(cudaMallocManaged((void **)&norms, n_size));
+    checkCudaErrors(cudaMemcpy(verts, &vertices, v_size, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(norms, &normals,  n_size, cudaMemcpyHostToDevice));
+
+    TriangleMesh *tri_mesh;
+    checkCudaErrors(cudaMallocManaged((void**)&tri_mesh, sizeof(TriangleMesh)));
+    *tri_mesh = TriangleMesh{verts, norms, true};
+
+    std::vector<Object> tri_vec;
+    for (int i = 0; i < 2; ++i) {
+        tri_vec.push_back(Object(Triangle(tri_mesh, triangles[i]), mat_idx, trans));
+    }
+
+    std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH);
+
+    int n_bytes_tri = tri_vec.size()*sizeof(Object);
+    int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
+
+    Object *tri;
+    checkCudaErrors(cudaMallocManaged((void **)&tri, n_bytes_tri));
+    checkCudaErrors(cudaMemcpy(tri, tri_vec.data(), n_bytes_tri, cudaMemcpyHostToDevice));
+
+    BVHNode *bvh;
+    checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
+    checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
+
+    return BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size());
 }

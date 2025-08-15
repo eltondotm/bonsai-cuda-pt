@@ -85,7 +85,7 @@ int main(int argc, char *argv[]) {
 
     clock_t t = clock();
     std::cout << "Building BVH... ";
-    Scene scene = create_mitsuba_scene(scene_path);
+    Scene scene = create_mitsuba_scene(scene_path, nx, ny);
     //Scene scene = create_scene(scene_path);
     t = clock() - t;
     std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";

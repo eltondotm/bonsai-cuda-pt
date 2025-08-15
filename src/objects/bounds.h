@@ -76,10 +76,6 @@ public:
                 }
             }
         }
-        // glm::vec3 a = glm::vec3(trans * glm::vec4(p_min, 1.f));
-        // glm::vec3 b = glm::vec3(trans * glm::vec4(p_max, 1.f));
-        // p_min = glm::vec3(min(a.x, b.x), min(a.y, b.y), min(a.z, b.z));
-        // p_max = glm::vec3(max(a.x, b.x), max(a.y, b.y), max(a.z, b.z));
     }
 
     // Any degenerate dimensions will not be normalized

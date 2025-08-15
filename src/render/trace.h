@@ -56,14 +56,15 @@ __host__ __device__ glm::vec3 trace_ray(const Ray& r, const Scene& scene) {
             glm::vec3 wo = world_to_normal * glm::vec4(ray.d, 0.f);
 
             // Sampling hit material
-            BSDFSample sample = sample_bsdf(*rec.material, wo);
+            const Material& material = scene.materials[rec.material];
+            BSDFSample sample = sample_bsdf(material, wo);
 
             if (i == 0 && sample.emission != glm::vec3(0.f))
                 return sample.emission;
             radiance += sample.emission * throughput;
 
-            if (scene.n_emitters == 0)
-                radiance += glm::vec3(0.2f) * throughput;
+            // if (scene.n_emitters == 0)
+            //     radiance += glm::vec3(0.2f) * throughput;
 
             // Create new ray
             float cos_theta_i = sample.direction.y;
@@ -72,7 +73,7 @@ __host__ __device__ glm::vec3 trace_ray(const Ray& r, const Scene& scene) {
             ray.o = ray.at(EPS_F);
 
             throughput *= sample.attenuation / sample.pdf;
-            if (!is_discrete(*rec.material))
+            if (!is_discrete(material))
                 throughput *= cos_theta_i;
             if (throughput == glm::vec3(0.f)) 
                 break;
@@ -101,7 +102,8 @@ __device__ glm::vec3 trace_speculative(const Ray& r, const Scene& scene) {
             glm::vec3 wo = world_to_normal * glm::vec4(ray.d, 0.f);
 
             // Sampling hit material
-            BSDFSample sample = sample_bsdf(*rec.material, wo);
+            const Material& material = scene.materials[rec.material];
+            BSDFSample sample = sample_bsdf(material, wo);
 
             if (i == 0 && sample.emission != glm::vec3(0.f))
                 return sample.emission;
@@ -117,7 +119,7 @@ __device__ glm::vec3 trace_speculative(const Ray& r, const Scene& scene) {
             ray.o = ray.at(EPS_F);
 
             throughput *= sample.attenuation / sample.pdf;
-            if (!is_discrete(*rec.material))
+            if (!is_discrete(material))
                 throughput *= cos_theta_i;
             if (throughput == glm::vec3(0.f)) 
                 break;
@@ -137,13 +139,18 @@ inline __device__ void trace(RayData& rd, const Scene& scene) {
 
     HitRecord rec;
     if (scene.geometry->hit_if_if(rd.ray, rec)) {
+        // TODO: Check for two-sided (currently just assuming)
+        if (glm::dot(rd.ray.d, rec.normal) > 0)
+            rec.normal *= -1;
+
         // Transforming normal vector to (0, 1, 0) for easier material sampling
         glm::mat4 normal_to_world = rotate_to(rec.normal);
         glm::mat4 world_to_normal = glm::transpose(normal_to_world);
         glm::vec3 wo = world_to_normal * glm::vec4(rd.ray.d, 0.f);
 
         // Sampling hit material
-        BSDFSample sample = sample_bsdf(*rec.material, wo);
+        const Material& material = scene.materials[rec.material];
+        BSDFSample sample = sample_bsdf(material, wo);
 
         if (rd.bounces == 0 && sample.emission != glm::vec3(0.f)) {
             rd.radiance = sample.emission;
@@ -153,8 +160,8 @@ inline __device__ void trace(RayData& rd, const Scene& scene) {
 
         rd.radiance += sample.emission * rd.throughput;
 
-        if (scene.n_emitters == 0)
-            rd.radiance += glm::vec3(0.2f) * rd.throughput;
+        // if (scene.n_emitters == 0)
+        //     rd.radiance += glm::vec3(0.2f) * rd.throughput;
 
         // Create new ray
         float cos_theta_i = sample.direction.y;
@@ -164,7 +171,7 @@ inline __device__ void trace(RayData& rd, const Scene& scene) {
         rd.bounces++;
 
         rd.throughput *= sample.attenuation / sample.pdf;
-        if (!is_discrete(*rec.material))
+        if (!is_discrete(material))
             rd.throughput *= cos_theta_i;
         if (rd.throughput == glm::vec3(0.f)) 
             rd.bounces = -1;

@@ -80,7 +80,7 @@ Scene create_scene(const char *filename) {
         checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
         checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
 
-        tri_bvhs.emplace_back(BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size(), material, glm::mat4(1.f)));
+        tri_bvhs.emplace_back(BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size()));
 
         if (const Emissive *e = cuda::std::get_if<Emissive>(&material)) {
             for (int i = 0; i < tri_vec.size(); ++i) {
@@ -125,14 +125,14 @@ void free_tri_mesh_bvh(const BVH<Object> *geo, int idx) {
     const Object *prims = geo->prims;
 
     if (node.num_hitables != 0) {
-        const BVH<Object>& tri_bvh = cuda::std::get<BVH<Object>>(prims[node.start_idx].underlying);
-        const Triangle& tri = cuda::std::get<Triangle>(tri_bvh.prims[0].underlying);
-
-        checkCudaErrors(cudaFree(tri.mesh->vertices));
-        checkCudaErrors(cudaFree(tri.mesh->normals));
-        checkCudaErrors(cudaFree(tri.mesh));
-        checkCudaErrors(cudaFree(tri_bvh.prims));
-        checkCudaErrors(cudaFree(tri_bvh.bvh));
+        const BVH<Object>& bvh = cuda::std::get<BVH<Object>>(prims[node.start_idx].underlying);
+        if (const Triangle *tri = cuda::std::get_if<Triangle>(&bvh.prims[0].underlying)) {
+            checkCudaErrors(cudaFree(tri->mesh->vertices));
+            checkCudaErrors(cudaFree(tri->mesh->normals));
+            checkCudaErrors(cudaFree(tri->mesh));
+        }
+        checkCudaErrors(cudaFree(bvh.prims));
+        checkCudaErrors(cudaFree(bvh.bvh));
         return;
     }
 

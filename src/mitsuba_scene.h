@@ -30,11 +30,17 @@ inline glm::mat4 transform_to_mat4(const tpm::Transform& t) {
         m[2],  m[6],  m[10], m[14],
         m[3],  m[7],  m[11], m[15]
     );
+    // return glm::mat4(
+    //     m[0],  m[1],  m[2],  m[3],
+    //     m[4],  m[5],  m[6],  m[7],
+    //     m[8],  m[9],  m[10], m[11],
+    //     m[12], m[13], m[14], m[15]
+    // );
 }
 
 // Creates a single-node BVH to hold the primitive as well as transform/material information
 // This format makes instancing convenient, as multiple BVHs can point to the same object
-BVH<Object> construct_primitive(Object& prim, const Material& mat, const glm::mat4& trans) {
+BVH<Object> construct_primitive(Object& prim) {
     std::vector<Object> prm_vec{prim};
     std::vector<BVHNode> bvh_vec = build_bvh(prm_vec, SAH);
 
@@ -49,11 +55,11 @@ BVH<Object> construct_primitive(Object& prim, const Material& mat, const glm::ma
     checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
     checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
 
-    return BVH<Object>(prm, prm_vec.size(), bvh, bvh_vec.size(), mat, trans);
+    return BVH<Object>(prm, prm_vec.size(), bvh, bvh_vec.size());
 }
 
 // Creates a BVH for a triangle mesh
-BVH<Object> construct_mesh(std::string& path, const Material& mat, const glm::mat4& trans) {
+BVH<Object> construct_mesh(std::string& path, unsigned int mat, const glm::mat4& to_world) {
     std::vector<ObjMesh> meshes = load_obj(path);
 
     ObjMesh& mesh = meshes[0];
@@ -74,24 +80,52 @@ BVH<Object> construct_mesh(std::string& path, const Material& mat, const glm::ma
     std::vector<Object> tri_vec;
     for (int i = 0; i < mesh.faces.size(); ++i) {
         Triangle tri = Triangle(tri_mesh, mesh.faces[i]);
-        tri_vec.push_back(Object(std::move(tri)));
+        tri_vec.push_back(Object(std::move(tri), mat, to_world));
     }
 
-    // BVH construction
-    std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH);
+    // Getting information for cached BVH
+    std::string bvh_path(path);
+    bvh_path.replace(bvh_path.find("models"), 6, "bvhs");
+    bvh_path.replace(bvh_path.end() - 3, bvh_path.end(), "bvh");
 
-    int n_bytes_tri = tri_vec.size()*sizeof(Object);
-    int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
+    // BVH construction / loading
+    BVHNode *bvh;
+    int nnodes;
+    // TODO: Must support object sorting to load BVH data
+    if (false) {
+        std::ifstream source(bvh_path, std::ios::in | std::ios::binary);
+        if (!source.is_open()) {
+            std::cout << "Error opening BVH file.\n";
+        }
+        std::vector<unsigned char> bvh_data((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+        source.close();
+        nnodes = bvh_data.size() / sizeof(BVHNode);
 
+        checkCudaErrors(cudaMallocManaged((void **)&bvh, bvh_data.size()));
+        checkCudaErrors(cudaMemcpy(bvh, bvh_data.data(), bvh_data.size(), cudaMemcpyHostToDevice));
+    } else {
+        std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH);
+        int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
+        nnodes = bvh_vec.size();
+        std::string new_dir = bvh_path.substr(0, bvh_path.find_last_of("/"));
+        std::filesystem::create_directory(new_dir);
+        std::ofstream dest(bvh_path, std::ios::out | std::ios::binary | std::ios::trunc);
+        if (!dest.is_open()) {
+            std::cout << "Error creating BVH file \n";
+        }
+        dest.write(reinterpret_cast<const char*>(bvh_vec.data()), bvh_vec.size()*sizeof(BVHNode));
+        dest.close();
+
+        checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
+        checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
+    }
+    
     Object *tri;
+    int n_bytes_tri = tri_vec.size()*sizeof(Object);
     checkCudaErrors(cudaMallocManaged((void **)&tri, n_bytes_tri));
     checkCudaErrors(cudaMemcpy(tri, tri_vec.data(), n_bytes_tri, cudaMemcpyHostToDevice));
 
-    BVHNode *bvh;
-    checkCudaErrors(cudaMallocManaged((void **)&bvh, n_bytes_bvh));
-    checkCudaErrors(cudaMemcpy(bvh, bvh_vec.data(), n_bytes_bvh, cudaMemcpyHostToDevice));
-
-    return BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size(), mat, trans);
+    return BVH<Object>(tri, tri_vec.size(), bvh, nnodes);
 }
 
 /* tinyparser-mitsuba scene format
@@ -115,10 +149,18 @@ BVH<Object> construct_mesh(std::string& path, const Material& mat, const glm::ma
  */
 
 // Initialize camera parameters from sensor object
-Camera parse_camera(const tpm::Object *cam) {
+Camera parse_camera(const tpm::Object *cam, int& width, int& height) {
     const auto& props = cam->properties();
     float fov = props.at("fov").getNumber();
     glm::mat4 to_world = transform_to_mat4(props.at("to_world").getTransform());
+
+    for (const std::shared_ptr<tpm::Object>& child : cam->anonymousChildren()) {
+        if (child->type() == tpm::OT_FILM) {
+            auto& film_props = child->properties();
+            width = film_props.at("width").getInteger();
+            height = film_props.at("height").getInteger();
+        }
+    }
 
     Camera camera;
     camera.set_fov(fov);
@@ -131,10 +173,6 @@ void parse_material(const tpm::Object *m, std::vector<Material>& materials, std:
     // Maps material id to its location in the materials vector
     id_to_idx[m->id()] = materials.size();
 
-    Material mat = Lambertian{glm::vec3(1.f)};
-    materials.push_back(mat);
-    return;
-
     // Ignore material add-ons like twosided, fetch base material
     while (m->anonymousChildren().size() != 0) {
         m = m->anonymousChildren()[0].get();
@@ -145,12 +183,26 @@ void parse_material(const tpm::Object *m, std::vector<Material>& materials, std:
     const std::string& type = m->pluginType();
     const auto& props = m->properties();
     if (type == "diffuse") {
-        const tpm::Color& albedo = props.at("reflectance").getColor();
-        Material mat = Lambertian{color_to_vec3(albedo)};
+        glm::vec3 albedo = color_to_vec3(props.at("reflectance").getColor());
+        Material mat = Lambertian{albedo};
+        materials.push_back(mat);
+    } else if (type == "roughdielectric" || type == "smoothdielectric") {
+        float ior = props.at("int_ior").getNumber();
+        Material mat = Glass{ior};
+        materials.push_back(mat);
+    } else if (type == "roughconductor" || type == "smoothconductor") {
+        Material mat = Metallic{};
         materials.push_back(mat);
     } else {
-        // Default to white diffuse
-        Material mat = Lambertian{glm::vec3(1.f)};
+        // Default to diffuse
+        glm::vec3 albedo(1.f);
+        if (props.find("reflectance") != props.end())
+            albedo = color_to_vec3(props.at("reflectance").getColor());
+        else if (props.find("specular_reflectance") != props.end())
+            albedo = color_to_vec3(props.at("specular_reflectance").getColor());
+        else if (props.find("diffuse_reflectance") != props.end())
+            albedo = color_to_vec3(props.at("diffuse_reflectance").getColor());
+        Material mat = Lambertian{albedo};
         materials.push_back(mat);
     }
 }
@@ -158,41 +210,41 @@ void parse_material(const tpm::Object *m, std::vector<Material>& materials, std:
 BVH<Object> parse_shape(const tpm::Object *o, std::string& path, std::vector<Material>& materials, std::map<std::string, int>& id_to_idx) {
     // Getting transformation matrix
     const auto& props = o->properties();
-    const tpm::Transform& to_world = props.at("to_world").getTransform();
-    glm::mat4 trans = transform_to_mat4(to_world);
+    const tpm::Transform& tpm_to_world = props.at("to_world").getTransform();
+    glm::mat4 to_world = transform_to_mat4(tpm_to_world);
 
     // Getting material (no pointers for now)
-    Material mat;
+    unsigned int mat_idx = 0;
     const auto& children = o->anonymousChildren();
     for (const std::shared_ptr<tpm::Object>& child : children) {
         if (child->type() == tpm::OT_BSDF) {
-            int mat_idx = id_to_idx[child->id()];
-            mat = materials[mat_idx];
+            mat_idx = id_to_idx[child->id()];
         }
         else if (child->type() == tpm::OT_EMITTER) {
             const tpm::Color& radiance = child->properties().at("radiance").getColor();
-            mat = Emissive{color_to_vec3(radiance)};
+            Material e = Emissive{color_to_vec3(radiance)};
+            mat_idx = materials.size();
+            materials.push_back(e);
             break;
         }
     }
 
-    //trans = glm::mat4(1.f);
-
     // Constructing object
     const std::string& type = o->pluginType();
     if (type == "obj") {
-        return construct_mesh(path + "/" + props.at("filename").getString(), mat, trans);
+        return construct_mesh(path + "/" + props.at("filename").getString(), mat_idx, to_world);
     } else if (type == "rectangle") {
-        Object prim = Object(Square());
-        return construct_primitive(prim, mat, trans);
+        //return construct_square(mat_idx, to_world);
+        Object prim = Object(Square(), mat_idx, to_world);
+        return construct_primitive(prim);
     } else if (type == "cube") {
-        return construct_cube(mat, trans);
+        return construct_cube(mat_idx, to_world);
     }
-    return construct_cube(mat, trans);
+    return construct_cube(mat_idx, to_world);
 }
 
 // Loading a .mini file, then converting to a gpu-friendly format for rendering
-Scene create_mitsuba_scene(const char *filename) {
+Scene create_mitsuba_scene(const char *filename, int& width, int& height) {
     std::string path = read_filepath(filename);
     tpm::SceneLoader loader = tpm::SceneLoader();
     const tpm::Scene scene = loader.loadFromFile(path + "/scene_v3.xml");
@@ -211,8 +263,9 @@ Scene create_mitsuba_scene(const char *filename) {
             case tpm::OT_SENSOR:
                 Camera *cam;
                 checkCudaErrors(cudaMallocManaged((void **)&cam, sizeof(Camera)));
-                *cam = parse_camera(object.get());
+                *cam = parse_camera(object.get(), width, height);
                 converted_scene.camera = cam;
+                break;
             case tpm::OT_BSDF:
                 parse_material(object.get(), materials, id_to_idx);
                 break;
@@ -227,6 +280,7 @@ Scene create_mitsuba_scene(const char *filename) {
 
     int n_bytes_scn = geometry.size()*sizeof(Object);
     int n_bytes_bvh = scn_bvh_vec.size()*sizeof(BVHNode);
+    int n_bytes_mat = materials.size()*sizeof(Material);
 
     Object *scn;
     checkCudaErrors(cudaMallocManaged((void **)&scn, n_bytes_scn));
@@ -239,8 +293,14 @@ Scene create_mitsuba_scene(const char *filename) {
     BVH<Object> *obj;
     checkCudaErrors(cudaMallocManaged((void **)&obj, sizeof(BVH<Object>)));
     *obj = BVH<Object>(scn, geometry.size(), scn_bvh, scn_bvh_vec.size());
+
+    Material *mat;
+    checkCudaErrors(cudaMallocManaged((void **)&mat, n_bytes_mat));
+    checkCudaErrors(cudaMemcpy(mat, materials.data(), n_bytes_mat, cudaMemcpyHostToDevice));
+
     
     converted_scene.geometry = obj;
+    converted_scene.materials = mat;
     converted_scene.n_emitters = 0;
 
     return converted_scene;

@@ -30,7 +30,7 @@ public:
         glm::vec2 view_dim = glm::vec2(w_view, h_view);
         glm::vec2 view_dir = (uv - 0.5f) * view_dim;
 
-        Ray r = Ray(glm::vec3(0.f), glm::vec3(view_dir, 1.0f));
+        Ray r = Ray(glm::vec3(0.f), glm::vec3(-view_dir.x, view_dir.y, 1.0f));
         r.transform(iview);
         return r;
     }

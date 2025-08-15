@@ -12,7 +12,7 @@ public:
     __host__ __device__ Square() {}
 
     __host__ __device__ Bounds bounds() const { 
-        return Bounds(glm::vec3(-1.f, 0.f, -1.f), glm::vec3(1.f, 0.f, 1.f));
+        return Bounds(glm::vec3(-1.f, -0.0001f, -1.f), glm::vec3(1.f, 0.0001f, 1.f));
     }
     
     // Ray is transformed so the intersection is with a unit square

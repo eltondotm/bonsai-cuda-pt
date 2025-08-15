@@ -7,6 +7,8 @@
 struct Scene {
     BVH<Object> *geometry = nullptr;
     Camera *camera = nullptr;
+    Material *materials = nullptr;
+    glm::mat4 *transforms = nullptr;
     Object **emitters = nullptr;
     int n_emitters = 0;
 };
