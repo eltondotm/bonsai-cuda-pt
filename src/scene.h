@@ -8,12 +8,10 @@ struct Scene {
     BVH<Object> *geometry = nullptr;
     Camera *camera = nullptr;
     Material *materials = nullptr;
-    glm::mat4 *transforms = nullptr;
+    Transform *transforms = nullptr;
     Object **emitters = nullptr;
     int n_emitters = 0;
 };
-
-BVH<Object> construct_primitive(Object& prim, const Material& mat, const glm::mat4& trans);
 
 // Util functions for converting between miniScene and glm
 inline glm::vec3 mini_to_vec3(mini::vec3f mini);

@@ -4,15 +4,15 @@
 #include <algorithm>
 #include <limits>
 
-std::vector<BVHNode> build_bvh(std::vector<Object>& objects, PartitionMethod method) {
+std::vector<BVHNode> build_bvh(std::vector<Object>& objects, PartitionMethod method, Transform *transforms) {
     BVHTreeNode *tree;
     switch (method) {
         case Midpoint:
-            tree = partition_midpoint(objects, 0, (int)objects.size(), 1);
+            tree = partition_midpoint(objects, 0, (int)objects.size(), 1, transforms);
             break;
         case SAH:
         default:
-            tree = partition_sah(objects, 0, (int)objects.size(), 1);
+            tree = partition_sah(objects, 0, (int)objects.size(), 1, transforms);
             break;     
     }
 
@@ -24,8 +24,15 @@ std::vector<BVHNode> build_bvh(std::vector<Object>& objects, PartitionMethod met
     return bvh;
 }
 
+inline Bounds get_bounds(const Object& h, const Transform *transforms) {
+    Bounds b = h.bounds();
+    if (transforms)
+        b.transform(transforms[h.trans].trans);
+    return b;
+}
+
 // Divide objects along bounding box midpoint
-BVHTreeNode *partition_midpoint(std::vector<Object>& objects, int start_idx, int count, const int leaf_size) {
+BVHTreeNode *partition_midpoint(std::vector<Object>& objects, int start_idx, int count, const int leaf_size, Transform *transforms) {
     // Get iterators to the bounds of the range being sorted
     ObjectIt start = objects.begin() + start_idx;
     ObjectIt end   = start + count;
@@ -34,7 +41,7 @@ BVHTreeNode *partition_midpoint(std::vector<Object>& objects, int start_idx, int
     if (count <= leaf_size) {
         Bounds leaf_bounds;
         for (ObjectIt h = start; h != end; ++h) {
-            leaf_bounds = union_bounds(leaf_bounds, h->bounds());
+            leaf_bounds = union_bounds(leaf_bounds, get_bounds(*h, transforms));
         }
         BVHTreeNode *leaf = new BVHTreeNode;
         leaf->create_leaf(leaf_bounds, start_idx, count);
@@ -44,7 +51,7 @@ BVHTreeNode *partition_midpoint(std::vector<Object>& objects, int start_idx, int
     // Construct bounding box for centroids of all boxes in the range
     Bounds centroid_bounds;
     for (ObjectIt h = start; h != end; ++h) {
-        centroid_bounds.enclose(h->bounds().centroid());
+        centroid_bounds.enclose(get_bounds(*h, transforms).centroid());
     }
     // Find the midpoint along the largest dimension
     int split_dim = centroid_bounds.max_extent_dim();
@@ -52,16 +59,16 @@ BVHTreeNode *partition_midpoint(std::vector<Object>& objects, int start_idx, int
 
     // Partition based on centroid dimension
     ObjectIt split_it = std::partition(start, end, 
-        [split_dim, midpoint](const Object& h) {
-            return h.bounds().centroid()[split_dim] < midpoint;
+        [split_dim, midpoint, transforms](const Object& h) {
+            return get_bounds(h, transforms).centroid()[split_dim] < midpoint;
         });
 
     // Fallback: divide in half if midpoint fails to split
     if (split_it == start || split_it == end) {
         split_it = start + (count / 2);
         std::nth_element(start, split_it, end, 
-            [split_dim](const Object& a, const Object& b) {
-                return a.bounds().centroid()[split_dim] < b.bounds().centroid()[split_dim];
+            [split_dim, transforms](const Object& a, const Object& b) {
+                return get_bounds(a, transforms).centroid()[split_dim] < get_bounds(b, transforms).centroid()[split_dim];
             });
     }
 
@@ -70,14 +77,14 @@ BVHTreeNode *partition_midpoint(std::vector<Object>& objects, int start_idx, int
     int num_zero   = (int)(split_it - start);
     int start_one  = start_idx + num_zero;
     int num_one    = count - num_zero;
-    BVHTreeNode *zero = partition_midpoint(objects, start_zero, num_zero, leaf_size);
-    BVHTreeNode *one  = partition_midpoint(objects, start_one,  num_one,  leaf_size);
+    BVHTreeNode *zero = partition_midpoint(objects, start_zero, num_zero, leaf_size, transforms);
+    BVHTreeNode *one  = partition_midpoint(objects, start_one,  num_one,  leaf_size, transforms);
     BVHTreeNode *root = new BVHTreeNode;
     root->create_interior(zero, one, split_dim);
     return root;
 }
 
-BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int count, const int leaf_size) {
+BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int count, const int leaf_size, Transform *transforms) {
     ObjectIt start = objects.begin() + start_idx;
     ObjectIt end   = start + count;
     
@@ -85,7 +92,7 @@ BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int coun
     if (count <= leaf_size) {
         Bounds leaf_bounds;
         for (ObjectIt h = start; h != end; ++h) {
-            leaf_bounds = union_bounds(leaf_bounds, h->bounds());
+            leaf_bounds = union_bounds(leaf_bounds, get_bounds(*h, transforms));
         }
         BVHTreeNode *leaf = new BVHTreeNode;
         leaf->create_leaf(leaf_bounds, start_idx, count);
@@ -97,8 +104,8 @@ BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int coun
     Bounds centroid_bounds;
     Bounds combined_bounds;
     for (ObjectIt h = start; h != end; ++h) {
-        centroid_bounds.enclose(h->bounds().centroid());
-        combined_bounds.enclose(h->bounds());
+        centroid_bounds.enclose(get_bounds(*h, transforms).centroid());
+        combined_bounds.enclose(get_bounds(*h, transforms));
     }
     // Find the midpoint along the largest dimension
     int dim = centroid_bounds.max_extent_dim();
@@ -110,11 +117,11 @@ BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int coun
     float costs[n_buckets-1];
 
     for (const Object& obj : objects) {
-        int bucket = n_buckets * centroid_bounds.normalize_point(obj.bounds().centroid())[dim];
+        int bucket = n_buckets * centroid_bounds.normalize_point(get_bounds(obj, transforms).centroid())[dim];
         if (bucket == n_buckets)
             bucket = n_buckets-1;
         buckets[bucket].count++;
-        buckets[bucket].bbox.enclose(obj.bounds());
+        buckets[bucket].bbox.enclose(get_bounds(obj, transforms));
     }
 
     // Add the cost of the left child to costs
@@ -152,8 +159,8 @@ BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int coun
 
     // Partition based on centroid dimension
     ObjectIt split_it = std::partition(start, end, 
-        [dim, n_buckets, best_bucket, &centroid_bounds](const Object& h) {
-            int bucket = n_buckets * centroid_bounds.normalize_point(h.bounds().centroid())[dim];
+        [dim, n_buckets, best_bucket, &centroid_bounds, transforms](const Object& h) {
+            int bucket = n_buckets * centroid_bounds.normalize_point(get_bounds(h, transforms).centroid())[dim];
             return bucket <= best_bucket;
         });
 
@@ -161,8 +168,8 @@ BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int coun
     if (split_it == start || split_it == end) {
         split_it = start + (count / 2);
         std::nth_element(start, split_it, end, 
-            [dim](const Object& a, const Object& b) {
-                return a.bounds().centroid()[dim] < b.bounds().centroid()[dim];
+            [dim, transforms](const Object& a, const Object& b) {
+                return get_bounds(a, transforms).centroid()[dim] < get_bounds(b, transforms).centroid()[dim];
             });
     }
 
@@ -171,8 +178,8 @@ BVHTreeNode *partition_sah(std::vector<Object>& objects, int start_idx, int coun
     int num_zero   = (int)(split_it - start);
     int start_one  = start_idx + num_zero;
     int num_one    = count - num_zero;
-    BVHTreeNode *zero = partition_midpoint(objects, start_zero, num_zero, leaf_size);
-    BVHTreeNode *one  = partition_midpoint(objects, start_one,  num_one,  leaf_size);
+    BVHTreeNode *zero = partition_midpoint(objects, start_zero, num_zero, leaf_size, transforms);
+    BVHTreeNode *one  = partition_midpoint(objects, start_one,  num_one,  leaf_size, transforms);
     BVHTreeNode *root = new BVHTreeNode;
     root->create_interior(zero, one, dim);
     return root;

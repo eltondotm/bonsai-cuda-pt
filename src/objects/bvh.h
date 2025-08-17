@@ -11,6 +11,29 @@
 
 //#define DEBUG
 
+struct Transform {
+    __host__ __device__ Transform() {
+        trans = glm::mat4(1.f);
+        itrans = glm::mat4(1.f);
+    }
+    __host__ __device__ Transform(const glm::mat4& t) {
+        trans = t;
+        itrans = glm::inverse(t);
+    }
+
+    glm::mat4 trans;
+    glm::mat4 itrans;
+};
+
+__host__ __device__ bool operator <(const Transform& lhs, const Transform& rhs);
+
+#ifdef __CUDACC__
+__host__ __device__ bool operator <(const Transform& lhs, const Transform& rhs) {
+    return glm::dot(lhs.trans[3], glm::vec4(1.f)) <
+           glm::dot(rhs.trans[3], glm::vec4(1.f));
+}
+#endif
+
 // Binary tree node for use in traversal
 struct alignas(32) BVHNode {
     Bounds bbox;
@@ -36,7 +59,7 @@ public:
     __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const { return false; }
 
     // Intersect is called on the top level BVH
-    __host__ __device__ bool hit_if_if(const Ray& r, HitRecord& rec) const {
+    __host__ __device__ bool hit_if_if(const Ray& r, HitRecord& rec, const Transform *trn) const {
         bool hit = false;
 
         // Precomputing values for faster bbox intersection
@@ -73,7 +96,7 @@ public:
                             roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
                             to_visit[to_visit_idx] = 0;
                         } else {
-                            hit |= prim.hit(r, rec);
+                            hit |= prim.hit(r, rec, trn[prim.trans]);
                         }
                     }
                     if (to_visit_idx < 0)
@@ -102,7 +125,7 @@ public:
         return hit;
     }
 
-    __host__ __device__ bool hit_while_while(const Ray& r, HitRecord& rec) const {
+    __host__ __device__ bool hit_while_while(const Ray& r, HitRecord& rec, const Transform *trn) const {
         bool hit = false;
 
         // Precomputing values for faster bbox intersection
@@ -157,7 +180,7 @@ public:
                     roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
                     to_visit[to_visit_idx] = 0;
                 } else {
-                    hit |= prim.hit(r, rec);
+                    hit |= prim.hit(r, rec, trn[prim.trans]);
                 }
                 ++prim_offset;
             } while (prim_offset < node->num_hitables);
@@ -169,7 +192,7 @@ public:
         return hit;
     }
 
-    __device__ bool hit_speculative(const Ray& r, HitRecord& rec) const {
+    __device__ bool hit_speculative(const Ray& r, HitRecord& rec, const Transform *trn) const {
         bool hit = false;
 
         // Precomputing values for faster bbox intersection
@@ -235,7 +258,7 @@ public:
                     roots[++to_visit_idx] = const_cast<BVH<Primitive> *>(tree);
                     to_visit[to_visit_idx] = 0;
                 } else {
-                    hit |= prim.hit(r, rec);
+                    hit |= prim.hit(r, rec, trn[prim.trans]);
                 }
                 ++prim_offset;
             } while (prim_offset < node->num_hitables);

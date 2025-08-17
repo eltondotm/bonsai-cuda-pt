@@ -16,34 +16,37 @@
 
 class Object {
 public:
-    __host__ __device__ Object(Sphere&& sphere, unsigned int m = 0, const glm::mat4& t = glm::mat4(1.f))
-        : underlying(cuda::std::move(sphere)), material(m), trans(t), itrans(glm::inverse(t)) {
+    __host__ __device__ Object(Sphere&& sphere, uint16_t m = 0, uint16_t t = 0)
+        : underlying(cuda::std::move(sphere)), material(m), trans(t) {
     }
-    __host__ __device__ Object(Triangle&& tri, unsigned int m = 0, const glm::mat4& t = glm::mat4(1.f))
-        : underlying(cuda::std::move(tri)), material(m), trans(t), itrans(glm::inverse(t)) {  
+    __host__ __device__ Object(Triangle&& tri, uint16_t m = 0, uint16_t t = 0)
+        : underlying(cuda::std::move(tri)), material(m), trans(t) {  
     }
-    __host__ __device__ Object(Square&& square, unsigned int m = 0, const glm::mat4& t = glm::mat4(1.f))
-        : underlying(cuda::std::move(square)), material(m), trans(t), itrans(glm::inverse(t)) {
+    __host__ __device__ Object(Square&& square, uint16_t m = 0, uint16_t t = 0)
+        : underlying(cuda::std::move(square)), material(m), trans(t) {
     }
-    __host__ __device__ Object(BVH<Object>&& bvh, unsigned int m = 0, const glm::mat4& t = glm::mat4(1.f))
-        : underlying(cuda::std::move(bvh)), material(m), trans(t), itrans(glm::inverse(t)) {
+    __host__ __device__ Object(BVH<Object>&& bvh, uint16_t m = 0, uint16_t t = 0)
+        : underlying(cuda::std::move(bvh)), material(m), trans(t) {
     }
 
     __host__ __device__ Bounds bounds() const {
+        return cuda::std::visit(overloaded{[](const auto& o) { return o.bounds(); }}, underlying);
+    }
+    __host__ __device__ Bounds bounds(const Transform& t) const {
         Bounds b = cuda::std::visit(overloaded{[](const auto& o) { return o.bounds(); }}, underlying);
-        b.transform(trans);
+        b.transform(t.trans);
         return b;
     }
 
-    __host__ __device__ bool hit(const Ray& r, HitRecord& rec) const {
+    __host__ __device__ bool hit(const Ray& r, HitRecord& rec, const Transform& t) const {
         Ray r_local(r);
-        r_local.transform(itrans);
+        r_local.transform(t.itrans);
         bool hit = cuda::std::visit(overloaded{
             [&r_local, &rec](const auto& o) { return o.hit(r_local, rec); }
         }, underlying);
         if (hit) {
             rec.material = material;
-            rec.transform(trans, glm::transpose(itrans), r.o);
+            rec.transform(t.trans, glm::transpose(t.itrans), r.o);
             r.max_t = rec.time;
         }
         return hit;
@@ -51,7 +54,6 @@ public:
     
     cuda::std::variant<Triangle, Sphere, Square, BVH<Object>> underlying;
 
-    unsigned int material;
-    glm::mat4 trans;
-    glm::mat4 itrans;
+    uint16_t material;
+    uint16_t trans;
 };

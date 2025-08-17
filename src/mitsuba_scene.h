@@ -40,9 +40,9 @@ inline glm::mat4 transform_to_mat4(const tpm::Transform& t) {
 
 // Creates a single-node BVH to hold the primitive as well as transform/material information
 // This format makes instancing convenient, as multiple BVHs can point to the same object
-BVH<Object> construct_primitive(Object& prim) {
+BVH<Object> construct_primitive(Object& prim, Transform *transforms) {
     std::vector<Object> prm_vec{prim};
-    std::vector<BVHNode> bvh_vec = build_bvh(prm_vec, SAH);
+    std::vector<BVHNode> bvh_vec = build_bvh(prm_vec, SAH, transforms);
 
     int n_bytes_prm = prm_vec.size()*sizeof(Object);
     int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
@@ -59,7 +59,7 @@ BVH<Object> construct_primitive(Object& prim) {
 }
 
 // Creates a BVH for a triangle mesh
-BVH<Object> construct_mesh(std::string& path, unsigned int mat, const glm::mat4& to_world) {
+BVH<Object> construct_mesh(std::string& path, uint16_t mat, uint16_t trans, Transform *transforms) {
     std::vector<ObjMesh> meshes = load_obj(path);
 
     ObjMesh& mesh = meshes[0];
@@ -80,7 +80,7 @@ BVH<Object> construct_mesh(std::string& path, unsigned int mat, const glm::mat4&
     std::vector<Object> tri_vec;
     for (int i = 0; i < mesh.faces.size(); ++i) {
         Triangle tri = Triangle(tri_mesh, mesh.faces[i]);
-        tri_vec.push_back(Object(std::move(tri), mat, to_world));
+        tri_vec.push_back(Object(std::move(tri), mat, trans));
     }
 
     // Getting information for cached BVH
@@ -104,7 +104,7 @@ BVH<Object> construct_mesh(std::string& path, unsigned int mat, const glm::mat4&
         checkCudaErrors(cudaMallocManaged((void **)&bvh, bvh_data.size()));
         checkCudaErrors(cudaMemcpy(bvh, bvh_data.data(), bvh_data.size(), cudaMemcpyHostToDevice));
     } else {
-        std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH);
+        std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH, transforms);
         int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
         nnodes = bvh_vec.size();
         std::string new_dir = bvh_path.substr(0, bvh_path.find_last_of("/"));
@@ -169,7 +169,7 @@ Camera parse_camera(const tpm::Object *cam, int& width, int& height) {
 }
 
 // Returns the index of the newly added material
-void parse_material(const tpm::Object *m, std::vector<Material>& materials, std::map<std::string, int>& id_to_idx) {
+void parse_material(const tpm::Object *m, std::vector<Material>& materials, std::map<std::string, uint16_t>& id_to_idx) {
     // Maps material id to its location in the materials vector
     id_to_idx[m->id()] = materials.size();
 
@@ -190,7 +190,7 @@ void parse_material(const tpm::Object *m, std::vector<Material>& materials, std:
         float ior = props.at("int_ior").getNumber();
         Material mat = Glass{ior};
         materials.push_back(mat);
-    } else if (type == "roughconductor" || type == "smoothconductor") {
+    } else if (type == "smoothconductor") {
         Material mat = Metallic{};
         materials.push_back(mat);
     } else {
@@ -207,11 +207,27 @@ void parse_material(const tpm::Object *m, std::vector<Material>& materials, std:
     }
 }
 
-BVH<Object> parse_shape(const tpm::Object *o, std::string& path, std::vector<Material>& materials, std::map<std::string, int>& id_to_idx) {
+BVH<Object> parse_shape(const tpm::Object *o, 
+                        std::string& path, 
+                        std::vector<Material>& materials, 
+                        std::map<std::string, uint16_t>& id_to_idx,
+                        std::vector<Transform>& transforms,
+                        std::map<Transform, uint16_t>& t_to_idx) {
     // Getting transformation matrix
     const auto& props = o->properties();
     const tpm::Transform& tpm_to_world = props.at("to_world").getTransform();
     glm::mat4 to_world = transform_to_mat4(tpm_to_world);
+
+    // Retrieving index or adding to vector if not present
+    uint16_t t_idx;
+    auto t_it = t_to_idx.find(to_world);
+    if (t_it == t_to_idx.end()) {
+        t_idx = transforms.size();
+        t_to_idx[to_world] = t_idx;
+        transforms.push_back(to_world);
+    } else {
+        t_idx = t_it->second;
+    }
 
     // Getting material (no pointers for now)
     unsigned int mat_idx = 0;
@@ -232,15 +248,15 @@ BVH<Object> parse_shape(const tpm::Object *o, std::string& path, std::vector<Mat
     // Constructing object
     const std::string& type = o->pluginType();
     if (type == "obj") {
-        return construct_mesh(path + "/" + props.at("filename").getString(), mat_idx, to_world);
+        return construct_mesh(path + "/" + props.at("filename").getString(), mat_idx, t_idx, transforms.data());
     } else if (type == "rectangle") {
         //return construct_square(mat_idx, to_world);
-        Object prim = Object(Square(), mat_idx, to_world);
-        return construct_primitive(prim);
+        Object prim = Object(Square(), mat_idx, t_idx);
+        return construct_primitive(prim, transforms.data());
     } else if (type == "cube") {
-        return construct_cube(mat_idx, to_world);
+        return construct_cube(mat_idx, t_idx, transforms.data());
     }
-    return construct_cube(mat_idx, to_world);
+    return construct_cube(mat_idx, t_idx, transforms.data());
 }
 
 // Loading a .mini file, then converting to a gpu-friendly format for rendering
@@ -251,7 +267,11 @@ Scene create_mitsuba_scene(const char *filename, int& width, int& height) {
     const std::vector<std::shared_ptr<tpm::Object>>& objects = scene.anonymousChildren();
 
     std::vector<Material> materials;
-    std::map<std::string, int> id_to_idx;
+    std::map<std::string, uint16_t> id_to_idx;
+
+    std::vector<Transform> transforms{ Transform() };
+    std::map<Transform, uint16_t> t_to_idx;
+    t_to_idx[glm::mat4(1.f)] = 0;
 
     std::vector<Object> geometry;
 
@@ -270,17 +290,18 @@ Scene create_mitsuba_scene(const char *filename, int& width, int& height) {
                 parse_material(object.get(), materials, id_to_idx);
                 break;
             case tpm::OT_SHAPE:
-                BVH<Object> shape = parse_shape(object.get(), path, materials, id_to_idx);
+                BVH<Object> shape = parse_shape(object.get(), path, materials, id_to_idx, transforms, t_to_idx);
                 geometry.push_back(Object(std::move(shape)));
                 break;
         }
     }
 
-    std::vector<BVHNode> scn_bvh_vec = build_bvh(geometry, SAH);
+    std::vector<BVHNode> scn_bvh_vec = build_bvh(geometry, SAH, transforms.data());
 
     int n_bytes_scn = geometry.size()*sizeof(Object);
     int n_bytes_bvh = scn_bvh_vec.size()*sizeof(BVHNode);
     int n_bytes_mat = materials.size()*sizeof(Material);
+    int n_bytes_trn = transforms.size()*sizeof(Transform);
 
     Object *scn;
     checkCudaErrors(cudaMallocManaged((void **)&scn, n_bytes_scn));
@@ -298,9 +319,13 @@ Scene create_mitsuba_scene(const char *filename, int& width, int& height) {
     checkCudaErrors(cudaMallocManaged((void **)&mat, n_bytes_mat));
     checkCudaErrors(cudaMemcpy(mat, materials.data(), n_bytes_mat, cudaMemcpyHostToDevice));
 
+    Transform *trn;
+    checkCudaErrors(cudaMallocManaged((void **)&trn, n_bytes_trn));
+    checkCudaErrors(cudaMemcpy(trn, transforms.data(), n_bytes_trn, cudaMemcpyHostToDevice));
     
     converted_scene.geometry = obj;
     converted_scene.materials = mat;
+    converted_scene.transforms = trn;
     converted_scene.n_emitters = 0;
 
     return converted_scene;

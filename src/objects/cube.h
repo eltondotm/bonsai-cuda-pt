@@ -5,7 +5,7 @@
 #include "bvh_build.h"
 #include "object.h"
 
-BVH<Object> construct_cube(unsigned int mat_idx, const glm::mat4& trans) {
+BVH<Object> construct_cube(uint16_t mat_idx, uint16_t trans, Transform *transforms) {
     constexpr glm::vec3 vertices[24] = {
         {  1, -1, -1 }, {  1, -1,  1 }, { -1, -1,  1 }, { -1, -1, -1 },
         {  1,  1, -1 }, { -1,  1, -1 }, { -1,  1,  1 }, {  1,  1,  1 },
@@ -45,7 +45,7 @@ BVH<Object> construct_cube(unsigned int mat_idx, const glm::mat4& trans) {
         tri_vec.push_back(Object(Triangle(tri_mesh, triangles[i]), mat_idx, trans));
     }
 
-    std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH);
+    std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH, transforms);
 
     int n_bytes_tri = tri_vec.size()*sizeof(Object);
     int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
@@ -61,7 +61,7 @@ BVH<Object> construct_cube(unsigned int mat_idx, const glm::mat4& trans) {
     return BVH<Object>(tri, tri_vec.size(), bvh, bvh_vec.size());
 }
 
-BVH<Object> construct_square(unsigned int mat_idx, const glm::mat4& trans) {
+BVH<Object> construct_square(uint16_t mat_idx, uint16_t trans, Transform *transforms) {
     constexpr glm::vec3 vertices[4] = {
         { 1,  0, -1 }, { 1,  0,  1 }, { -1,  0,  1 }, { -1, 0, -1 }
     };
@@ -90,7 +90,7 @@ BVH<Object> construct_square(unsigned int mat_idx, const glm::mat4& trans) {
         tri_vec.push_back(Object(Triangle(tri_mesh, triangles[i]), mat_idx, trans));
     }
 
-    std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH);
+    std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH, transforms);
 
     int n_bytes_tri = tri_vec.size()*sizeof(Object);
     int n_bytes_bvh = bvh_vec.size()*sizeof(BVHNode);
