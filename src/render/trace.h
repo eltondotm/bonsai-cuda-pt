@@ -12,7 +12,7 @@
 
 #define MAX_BOUNCES 10
 #define LIGHT_SAMPLES 2
-#define EPS_F 0.0001f
+#define EPS_F 1E-6f
 
 // Stores ray state for 
 struct alignas(64) RayData {
@@ -144,6 +144,12 @@ inline __device__ void trace(RayData& rd, const Scene& scene) {
         // Sampling hit material
         const Material& material = scene.materials[rec.material];
         BSDFSample sample = sample_bsdf(material, wo);
+
+        cudaTextureObject_t tex;
+        if (get_texture(material, tex)) {
+            float4 rgba = tex2D<float4>(tex, rec.u, rec.v);
+            sample.attenuation *= glm::vec3(rgba.x, rgba.y, rgba.z);
+        }
 
         if (rd.bounces == 0 && sample.emission != glm::vec3(0.f)) {
             rd.radiance = sample.emission;

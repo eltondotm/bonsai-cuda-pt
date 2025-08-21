@@ -16,6 +16,8 @@
 struct TriangleMesh {
     glm::vec3 *vertices;
     glm::vec3 *normals;
+    float     *u;
+    float     *v;
     bool has_normals = false;
 };
 
@@ -71,10 +73,21 @@ public:
             // Default to plane normal (not smooth)
             norm = glm::normalize(glm::cross(ab, ac));
         }
+
+        // Calculate hit UV
+        float tex_u, tex_v = 0;
+        if (mesh->u) {
+            float u0 = mesh->u[idx.x], u1 = mesh->u[idx.y], u2 = mesh->u[idx.z];
+            float v0 = mesh->v[idx.x], v1 = mesh->v[idx.y], v2 = mesh->v[idx.z];
+            tex_u = u0*(1 - u - v) + u1*u + u2*v;
+            tex_v = v0*(1 - u - v) + v1*u + v2*v;
+        }
         
         rec.position = r.at(t);
         rec.normal = norm;
         rec.time = t;
+        rec.u = tex_u;
+        rec.v = tex_v;
         return true;
     }
 

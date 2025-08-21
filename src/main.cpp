@@ -121,7 +121,7 @@ int main(int argc, char *argv[]) {
         checkCudaErrors(cudaDeviceSynchronize());
         clock_t t = clock();
         std::cout << "Rendering on GPU with while-while... ";
-        render(nx, ny, ns, out, scene);
+        render(nx, ny, 1, out, scene);
         checkCudaErrors(cudaDeviceSynchronize());
         t = clock() - t;
         std::cout << "took " << (double)t/CLOCKS_PER_SEC << " seconds\n";

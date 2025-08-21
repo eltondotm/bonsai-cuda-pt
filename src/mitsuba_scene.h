@@ -9,6 +9,7 @@
 
 #include "util/file.h"
 #include "util/load_obj.h"
+#include "util/texture.h"
 #include "scene.h"
 #include "cube.h"
 
@@ -59,23 +60,31 @@ BVH<Object> construct_primitive(Object& prim, Transform *transforms) {
 }
 
 // Creates a BVH for a triangle mesh
-BVH<Object> construct_mesh(std::string& path, uint16_t mat, uint16_t trans, Transform *transforms) {
+BVH<Object> construct_mesh(const std::string& path, uint16_t mat, uint16_t trans, Transform *transforms) {
     std::vector<ObjMesh> meshes = load_obj(path);
 
     ObjMesh& mesh = meshes[0];
 
     glm::vec3 *verts;
     glm::vec3 *norms;
-    int v_size = mesh.vertices.size()*sizeof(glm::vec3);
-    int n_size = mesh.normals.size()*sizeof(glm::vec3);
+    float     *u;
+    float     *v;
+    int v_size  = mesh.vertices.size()*sizeof(glm::vec3);
+    int n_size  = mesh.normals.size()*sizeof(glm::vec3);
+    int us_size = mesh.us.size()*sizeof(float);
+    int vs_size = mesh.vs.size()*sizeof(float);
     checkCudaErrors(cudaMallocManaged((void **)&verts, v_size));
     checkCudaErrors(cudaMallocManaged((void **)&norms, n_size));
+    checkCudaErrors(cudaMallocManaged((void **)&u,    us_size));
+    checkCudaErrors(cudaMallocManaged((void **)&v,    vs_size));
     checkCudaErrors(cudaMemcpy(verts, mesh.vertices.data(), v_size, cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(norms, mesh.normals.data(), n_size, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(u, mesh.us.data(), us_size, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(v, mesh.vs.data(), vs_size, cudaMemcpyHostToDevice));
 
     TriangleMesh *tri_mesh;
     checkCudaErrors(cudaMallocManaged((void**)&tri_mesh, sizeof(TriangleMesh)));
-    *tri_mesh = TriangleMesh{verts, norms, !mesh.normals.empty()};
+    *tri_mesh = TriangleMesh{verts, norms, u, v, !mesh.normals.empty()};
 
     std::vector<Object> tri_vec;
     for (int i = 0; i < mesh.faces.size(); ++i) {
@@ -168,8 +177,14 @@ Camera parse_camera(const tpm::Object *cam, int& width, int& height) {
     return camera;
 }
 
-// Returns the index of the newly added material
-void parse_material(const tpm::Object *m, std::vector<Material>& materials, std::map<std::string, uint16_t>& id_to_idx) {
+// Converts Mitsuba materials to materials implemented in this renderer
+// Maps material name to their index in the vector
+void parse_material(const tpm::Object *m, std::vector<Material>& materials, std::map<std::string, uint16_t>& id_to_idx,
+                    std::map<std::string, cudaTextureObject_t>& textures, const std::string& path) {
+    while(!m->hasID()) {
+        m = m->anonymousChildren()[0].get();
+    }          
+
     // Maps material id to its location in the materials vector
     id_to_idx[m->id()] = materials.size();
 
@@ -182,27 +197,46 @@ void parse_material(const tpm::Object *m, std::vector<Material>& materials, std:
     // It would be worth adding these checks if some fields return default values
     const std::string& type = m->pluginType();
     const auto& props = m->properties();
-    if (type == "diffuse") {
-        glm::vec3 albedo = color_to_vec3(props.at("reflectance").getColor());
-        Material mat = Lambertian{albedo};
-        materials.push_back(mat);
-    } else if (type == "roughdielectric" || type == "smoothdielectric") {
+    if (type == "roughdielectric" || type == "smoothdielectric" || type == "thindielectric") {
         float ior = props.at("int_ior").getNumber();
         Material mat = Glass{ior};
         materials.push_back(mat);
-    } else if (type == "smoothconductor") {
+    } else if (type == "conductor") {
         Material mat = Metallic{};
         materials.push_back(mat);
     } else {
         // Default to diffuse
         glm::vec3 albedo(1.f);
+        cudaTextureObject_t tex_obj = -1ULL;
         if (props.find("reflectance") != props.end())
             albedo = color_to_vec3(props.at("reflectance").getColor());
-        else if (props.find("specular_reflectance") != props.end())
-            albedo = color_to_vec3(props.at("specular_reflectance").getColor());
         else if (props.find("diffuse_reflectance") != props.end())
             albedo = color_to_vec3(props.at("diffuse_reflectance").getColor());
-        Material mat = Lambertian{albedo};
+        else if (props.find("specular_reflectance") != props.end())
+            albedo = color_to_vec3(props.at("specular_reflectance").getColor());
+        
+        // Textured material
+        const auto& nc = m->namedChildren();
+        if (!nc.empty()) {
+            std::shared_ptr<tpm::Object> tex = nullptr;
+            if (nc.find("reflectance") != nc.end())
+                tex = nc.at("reflectance");
+            else if (nc.find("diffuse_reflectance") != nc.end())
+                tex = nc.at("diffuse_reflectance");
+            else if (nc.find("specular_reflectance") != nc.end())
+                tex = nc.at("specular_reflectance");
+            if (tex) {
+                std::string tex_path = path + "/" + tex->properties().at("filename").getString();
+                auto tex_loc = textures.find(tex_path);
+                if (tex_loc == textures.end()) {
+                    tex_obj = load_texture(tex_path);
+                    textures[tex_path] = tex_obj;
+                } else {
+                    tex_obj = tex_loc->second;
+                }
+            }
+        } 
+        Material mat = Lambertian{albedo, tex_obj};
         materials.push_back(mat);
     }
 }
@@ -250,7 +284,7 @@ BVH<Object> parse_shape(const tpm::Object *o,
     if (type == "obj") {
         return construct_mesh(path + "/" + props.at("filename").getString(), mat_idx, t_idx, transforms.data());
     } else if (type == "rectangle") {
-        //return construct_square(mat_idx, to_world);
+        //return construct_square(mat_idx, t_idx, transforms.data());
         Object prim = Object(Square(), mat_idx, t_idx);
         return construct_primitive(prim, transforms.data());
     } else if (type == "cube") {
@@ -273,6 +307,8 @@ Scene create_mitsuba_scene(const char *filename, int& width, int& height) {
     std::map<Transform, uint16_t> t_to_idx;
     t_to_idx[glm::mat4(1.f)] = 0;
 
+    std::map<std::string, cudaTextureObject_t> textures;
+
     std::vector<Object> geometry;
 
     Scene converted_scene;
@@ -287,7 +323,7 @@ Scene create_mitsuba_scene(const char *filename, int& width, int& height) {
                 converted_scene.camera = cam;
                 break;
             case tpm::OT_BSDF:
-                parse_material(object.get(), materials, id_to_idx);
+                parse_material(object.get(), materials, id_to_idx, textures, path);
                 break;
             case tpm::OT_SHAPE:
                 BVH<Object> shape = parse_shape(object.get(), path, materials, id_to_idx, transforms, t_to_idx);

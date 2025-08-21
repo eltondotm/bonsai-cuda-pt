@@ -6,10 +6,12 @@
 #include "materials.h"
 
 struct HitRecord {
-    glm::vec3    position;
-    glm::vec3    normal;
-    float        time;
-    unsigned int material;
+    glm::vec3 position;
+    glm::vec3 normal;
+    float     time;
+    float     u;
+    float     v;
+    uint16_t  material;
 
     // Origin should be pre-transform ray origin
     __host__ __device__ void transform(const glm::mat4& transform, const glm::mat4& norm, const glm::vec3& origin) {

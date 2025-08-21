@@ -22,6 +22,8 @@ struct ObjMesh {
   std::vector<glm::vec3> vertices;
   std::vector<glm::vec3> normals;
   std::vector<glm::ivec3> faces;
+  std::vector<float> us;
+  std::vector<float> vs;
 
   void clear() {
     vertices.clear();
@@ -37,6 +39,8 @@ std::vector<ObjMesh> load_obj(const std::string &obj_filename) {
   std::map<int, int> knownVertices;
   std::vector<glm::vec3> vertices;
   std::vector<glm::vec3> normals;
+  std::vector<float> us;
+  std::vector<float> vs;
 
   std::string line;
   std::ifstream in(obj_filename.c_str());
@@ -52,7 +56,10 @@ std::vector<ObjMesh> load_obj(const std::string &obj_filename) {
       sscanf((char*)line.c_str(), "vn %f %f %f",&n.x,&n.y,&n.z);
       normals.push_back(n);
     } else if (line[0] == 'v' && line[1] == 't') {
-      continue;  // Texture support not implemented yet
+      float u, v;
+      sscanf((char*)line.c_str(), "vt %f %f",&u, &v);
+      us.push_back(u);
+      vs.push_back(v);
     } else if (line[0] == '#' && line[1] == ' ') {
       continue;
     } else if (line[0] == 'g' && line[1] == ' ') {
@@ -72,6 +79,8 @@ std::vector<ObjMesh> load_obj(const std::string &obj_filename) {
           knownVertices[i] = mesh.vertices.size();
           mesh.vertices.push_back(vertices[i-1]);
           mesh.normals.push_back(normals[i-1]);
+          mesh.us.push_back(us[i-1]);
+          mesh.vs.push_back(vs[i-1]);
         } 
         i = knownVertices[i];
       }

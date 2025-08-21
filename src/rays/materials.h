@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include <texture_indirect_functions.h>
 #include <cuda/std/variant>
 #include <cuda/std/utility>
 
@@ -22,6 +23,7 @@ struct BSDFSample {
 
 struct Lambertian {
     glm::vec3 albedo;
+    cudaTextureObject_t tex = -1ULL;
     __host__ __device__ BSDFSample sample(glm::vec3 wo) const;
 };
 
@@ -44,6 +46,8 @@ struct Emissive {
 using Material = cuda::std::variant<Lambertian, Metallic, Glass, Emissive>;
 
 __host__ __device__ BSDFSample sample_bsdf(const Material& m, glm::vec3 wo);
+
+__host__ __device__ bool get_texture(const Material& m, cudaTextureObject_t& t);
 
 __host__ __device__ bool is_discrete(const Material& m);
 
@@ -106,19 +110,6 @@ __host__ __device__ BSDFSample Glass::sample(glm::vec3 wo) const {
         }
     }
 
-    // float eta = wo.y < 0 ? 1.0f / ior : ior;
-    // glm::vec3 wi = glm::refract(wo, glm::vec3(0.f, 1.f, 0.f), eta);
-
-    // // refract returns 0-vector on total internal reflection
-    // if (wi == glm::vec3(0.f)) {
-    //     wi = reflect(wo);
-    // } else {
-    //     float cos = abs(glm::dot(wo, wi));
-    //     float fr = schlick(cos, eta);
-    //     if (rng::unit() < fr)
-    //         wi = reflect(wo);
-    // }
-
     BSDFSample sample;
     sample.attenuation = glm::vec3(1.f);
     sample.direction = wi;
@@ -137,6 +128,15 @@ __host__ __device__ BSDFSample Emissive::sample(glm::vec3 wo) const {
 __host__ __device__ BSDFSample sample_bsdf(const Material& m, glm::vec3 wo) {
     return cuda::std::visit(overloaded{
         [&wo](const auto& mat) { return mat.sample(wo); }
+    }, m);
+}
+
+__host__ __device__ bool get_texture(const Material& m, cudaTextureObject_t& t) {
+    return cuda::std::visit(overloaded{
+        [&t](const Lambertian& mat) { 
+            t = mat.tex; 
+            return t != -1ULL; },
+        [  ](const auto&       mat) { return false; }
     }, m);
 }
 

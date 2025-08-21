@@ -58,7 +58,7 @@ Scene create_scene(const char *filename) {
 
         TriangleMesh *tri_mesh;
         checkCudaErrors(cudaMallocManaged((void**)&tri_mesh, sizeof(TriangleMesh)));
-        *tri_mesh = TriangleMesh{verts, norms, !mesh->normals.empty()};
+        *tri_mesh = TriangleMesh{verts, norms, nullptr, nullptr, !mesh->normals.empty()};
 
         std::vector<Object> tri_vec;
         for (int i = 0; i < mesh->getNumPrims(); ++i) {

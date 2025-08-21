@@ -38,7 +38,7 @@ BVH<Object> construct_cube(uint16_t mat_idx, uint16_t trans, Transform *transfor
 
     TriangleMesh *tri_mesh;
     checkCudaErrors(cudaMallocManaged((void**)&tri_mesh, sizeof(TriangleMesh)));
-    *tri_mesh = TriangleMesh{verts, norms, true};
+    *tri_mesh = TriangleMesh{verts, norms, nullptr, nullptr, true};
 
     std::vector<Object> tri_vec;
     for (int i = 0; i < 12; ++i) {
@@ -62,15 +62,25 @@ BVH<Object> construct_cube(uint16_t mat_idx, uint16_t trans, Transform *transfor
 }
 
 BVH<Object> construct_square(uint16_t mat_idx, uint16_t trans, Transform *transforms) {
-    constexpr glm::vec3 vertices[4] = {
-        { 1,  0, -1 }, { 1,  0,  1 }, { -1,  0,  1 }, { -1, 0, -1 }
+    glm::vec3 vertices[4] = {
+        { 1,  -1,  0 }, { 1,  1,  0 }, { -1,  1,  0 }, { -1, -1,  0 }
     };
-    constexpr glm::vec3 normals[4] = {
-        { 0, 1, 0 }, { 0, 1, 0 }, { 0, 1, 0 }, { 0, 1, 0 }
+    glm::vec3 normals[4] = {
+        { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }, { 0, 0, 1 }
     };
-    constexpr glm::ivec3 triangles[2] = {
+    glm::ivec3 triangles[2] = {
         {  0,  1,  2 }, {  3,  0,  2 }
     };
+
+    for (int i = 0; i < 4; ++i) {
+        glm::vec3& vi = vertices[i];
+        glm::vec3& ni = normals[i];
+        vi = transforms[trans].trans * glm::vec4(vi, 1.f);
+        ni = transforms[trans].trans * glm::vec4(ni, 0.f);
+        // vi = glm::vec3(vi.x, vi.z, vi.y);
+        // ni = glm::vec3(ni.x, ni.z, ni.y);
+    }
+    trans = 0;
 
     glm::vec3 *verts;
     glm::vec3 *norms;
@@ -83,7 +93,7 @@ BVH<Object> construct_square(uint16_t mat_idx, uint16_t trans, Transform *transf
 
     TriangleMesh *tri_mesh;
     checkCudaErrors(cudaMallocManaged((void**)&tri_mesh, sizeof(TriangleMesh)));
-    *tri_mesh = TriangleMesh{verts, norms, true};
+    *tri_mesh = TriangleMesh{verts, norms, nullptr, nullptr, true};
 
     std::vector<Object> tri_vec;
     for (int i = 0; i < 2; ++i) {

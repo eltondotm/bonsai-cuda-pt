@@ -28,6 +28,8 @@ struct Transform {
 __host__ __device__ bool operator <(const Transform& lhs, const Transform& rhs);
 
 #ifdef __CUDACC__
+
+
 __host__ __device__ bool operator <(const Transform& lhs, const Transform& rhs) {
     return glm::dot(lhs.trans[3], glm::vec4(1.f)) <
            glm::dot(rhs.trans[3], glm::vec4(1.f));
