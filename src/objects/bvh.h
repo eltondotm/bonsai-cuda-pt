@@ -63,6 +63,8 @@ public:
     // Intersect is called on the top level BVH
     __host__ __device__ bool hit_if_if(const Ray& r, HitRecord& rec, const Transform *trn) const {
         bool hit = false;
+        r.nodes_traversed = 0;
+        r.leaf_intersections = 0;
 
         // Precomputing values for faster bbox intersection
         glm::vec3 inv_dir = 1.f / r.d;
@@ -81,6 +83,7 @@ public:
             }
             #endif
             const BVHNode *node = &(root->bvh[node_idx]);
+            r.nodes_traversed++;
             if (node->bbox.intersect(r, inv_dir, dir_sign)) {
                 // Intersection with bounds, check node
                 if (node->num_hitables > 0) {
@@ -99,6 +102,7 @@ public:
                             to_visit[to_visit_idx] = 0;
                         } else {
                             hit |= prim.hit(r, rec, trn[prim.trans]);
+                            r.leaf_intersections++;
                         }
                     }
                     if (to_visit_idx < 0)
@@ -129,6 +133,8 @@ public:
 
     __host__ __device__ bool hit_while_while(const Ray& r, HitRecord& rec, const Transform *trn) const {
         bool hit = false;
+        r.nodes_traversed = 0;
+        r.leaf_intersections = 0;
 
         // Precomputing values for faster bbox intersection
         glm::vec3 inv_dir = 1.f / r.d;
@@ -148,6 +154,7 @@ public:
             #endif
             // while current node is an interior node, traverse to next node
             const BVHNode *node = &(root->bvh[node_idx]);
+            r.nodes_traversed++;
             while (node->num_hitables == 0) {
                 if (node->bbox.intersect(r, inv_dir, dir_sign)) {
                     if (dir_sign[node->axis]) {
@@ -166,6 +173,7 @@ public:
                     root = roots[to_visit_idx];
                 }
                 node = &(root->bvh[node_idx]);
+                r.nodes_traversed++;
             }
             // while node has triangles to test, perform intersection test
             to_visit_idx--;
@@ -183,6 +191,7 @@ public:
                     to_visit[to_visit_idx] = 0;
                 } else {
                     hit |= prim.hit(r, rec, trn[prim.trans]);
+                    r.leaf_intersections++;
                 }
                 ++prim_offset;
             } while (prim_offset < node->num_hitables);
@@ -196,6 +205,8 @@ public:
 
     __device__ bool hit_speculative(const Ray& r, HitRecord& rec, const Transform *trn) const {
         bool hit = false;
+        r.nodes_traversed = 0;
+        r.leaf_intersections = 0;
 
         // Precomputing values for faster bbox intersection
         glm::vec3 inv_dir = 1.f / r.d;
@@ -206,6 +217,7 @@ public:
         int to_visit_idx = 0;  // Current position in the stack
         int node_idx = 0;      // Index of the BVH node to check
         BVH<Primitive> *root = const_cast<BVH<Primitive> *>(this);
+        uint8_t prim_offset = 0;
 
         const BVHNode *leaf = nullptr;  // Buffered leaf node for speculative traversal
 
@@ -235,6 +247,7 @@ public:
                     root = roots[to_visit_idx];
                 }
                 node = &(root->bvh[node_idx]);
+                r.nodes_traversed++;
             }
             
             if (node->num_hitables != 0 && !leaf) {
@@ -247,8 +260,7 @@ public:
                 continue;        
 
             // while node has triangles to test, perform intersection test
-            int prim_offset = 0;
-            do {
+            if (prim_offset < node->num_hitables) {
                 int prim_idx = leaf->start_idx + prim_offset;
                 #ifdef DEBUG
                 if (prim_idx >= root->nprims) {
@@ -263,8 +275,11 @@ public:
                     hit |= prim.hit(r, rec, trn[prim.trans]);
                 }
                 ++prim_offset;
-            } while (prim_offset < node->num_hitables);
-            leaf = nullptr;
+                r.leaf_intersections++;
+            } else {
+                leaf = nullptr;
+                prim_offset = 0;
+            }
 
             if (to_visit_idx < 0)
                 return hit;  // Stack has been exhausted

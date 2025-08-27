@@ -28,4 +28,6 @@ class Ray
         glm::vec3 o;
         glm::vec3 d;
         mutable float max_t = cuda::std::numeric_limits<float>::max();
+        mutable uint8_t nodes_traversed = 0;
+        mutable uint8_t leaf_intersections = 0;
 };

@@ -12,7 +12,7 @@
 
 #define MAX_BOUNCES 10
 #define LIGHT_SAMPLES 2
-#define EPS_F 1E-6f
+#define EPS_F 1E-4f
 
 // Stores ray state for 
 struct alignas(64) RayData {
@@ -48,7 +48,12 @@ __host__ __device__ glm::vec3 trace_ray(const Ray& r, const Scene& scene) {
 
     for (int i = 0; i < MAX_BOUNCES; ++i) {
         if (geo->hit_while_while(ray, rec, scene.transforms)) {
-            //return rec.normal*0.5f+0.5f;  // Normal visualization
+            #ifdef TRAVERSE_INFO
+            return glm::vec3(ray.leaf_intersections);
+            #endif
+
+            if (glm::dot(ray.d, rec.normal) > 0)
+                rec.normal *= -1;
 
             // Transforming normal vector to (0, 1, 0) for easier material sampling
             glm::mat4 normal_to_world = rotate_to(rec.normal);
@@ -91,7 +96,12 @@ __device__ glm::vec3 trace_speculative(const Ray& r, const Scene& scene) {
 
     for (int i = 0; i < MAX_BOUNCES; ++i) {
         if (geo->hit_speculative(ray, rec, scene.transforms)) {
-            //return rec.normal*0.5f+0.5f;  // Normal visualization
+            #ifdef TRAVERSE_INFO
+            return glm::vec3(ray.leaf_intersections);
+            #endif
+
+            if (glm::dot(ray.d, rec.normal) > 0)
+                rec.normal *= -1;
 
             // Transforming normal vector to (0, 1, 0) for easier material sampling
             glm::mat4 normal_to_world = rotate_to(rec.normal);
@@ -135,7 +145,16 @@ inline __device__ void trace(RayData& rd, const Scene& scene) {
     }
 
     HitRecord rec;
-    if (scene.geometry->hit_if_if(rd.ray, rec, scene.transforms)) {
+    if (scene.geometry->hit_while_while(rd.ray, rec, scene.transforms)) {
+        #ifdef TRAVERSE_INFO
+        rd.radiance = glm::vec3(rd.ray.leaf_intersections);
+        rd.bounces = -1;
+        return;
+        #endif
+
+        if (glm::dot(rd.ray.d, rec.normal) > 0)
+            rec.normal *= -1;
+
         // Transforming normal vector to (0, 1, 0) for easier material sampling
         glm::mat4 normal_to_world = rotate_to(rec.normal);
         glm::mat4 world_to_normal = glm::transpose(normal_to_world);

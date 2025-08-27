@@ -293,7 +293,7 @@ BVH<Object> parse_shape(const tpm::Object *o,
     return construct_cube(mat_idx, t_idx, transforms.data());
 }
 
-// Loading a .mini file, then converting to a gpu-friendly format for rendering
+// Loading a Mitsuba .xml file, then converting to a gpu-friendly format for rendering
 Scene create_mitsuba_scene(const char *filename, int& width, int& height) {
     std::string path = read_filepath(filename);
     tpm::SceneLoader loader = tpm::SceneLoader();

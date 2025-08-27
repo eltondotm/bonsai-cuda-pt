@@ -53,7 +53,7 @@ public:
         radius = glm::length(target - pos);
 
         glm::vec3 dir = glm::normalize(target - pos);
-        glm::vec3 up  = glm::vec3(0.f, 1.f, 1.f);
+        glm::vec3 up  = glm::vec3(0.f, 1.f, 0.f);
         rotation = glm::quatLookAt(dir, up);
         view_update();
     }

@@ -40,9 +40,16 @@ Scene create_scene(const char *filename) {
     }
 
     Scene converted_scene;
-    std::vector<Object *>emitters;
 
+    Transform *transforms;
+    checkCudaErrors(cudaMallocManaged((void **)&transforms, sizeof(Transform)));
+    *transforms = Transform();
+    converted_scene.transforms = transforms;
+
+    std::vector<Object *> emitters;
+    std::vector<Material> materials;
     std::vector<Object> tri_bvhs;
+
     for (const mini::Mesh::SP& mesh : meshes) {
         // Moving mesh data to arrays for access from host or device
         glm::vec3 *verts;
@@ -54,8 +61,6 @@ Scene create_scene(const char *filename) {
         checkCudaErrors(cudaMemcpy(verts, mesh->vertices.data(), v_size, cudaMemcpyHostToDevice));
         checkCudaErrors(cudaMemcpy(norms, mesh->normals.data(), n_size, cudaMemcpyHostToDevice));
 
-        Material material = mini_disney_to_material(mesh->material->as<mini::DisneyMaterial>());
-
         TriangleMesh *tri_mesh;
         checkCudaErrors(cudaMallocManaged((void**)&tri_mesh, sizeof(TriangleMesh)));
         *tri_mesh = TriangleMesh{verts, norms, nullptr, nullptr, !mesh->normals.empty()};
@@ -63,8 +68,11 @@ Scene create_scene(const char *filename) {
         std::vector<Object> tri_vec;
         for (int i = 0; i < mesh->getNumPrims(); ++i) {
             Triangle tri = Triangle(tri_mesh, mini_to_ivec3(mesh->indices[i]));
-            tri_vec.push_back(Object(std::move(tri)));
+            tri_vec.push_back(Object(std::move(tri), materials.size(), 0));
         }
+        
+        Material material = mini_disney_to_material(mesh->material->as<mini::DisneyMaterial>());
+        materials.push_back(material);
 
         // BVH construction
         std::vector<BVHNode> bvh_vec = build_bvh(tri_vec, SAH);
@@ -94,6 +102,7 @@ Scene create_scene(const char *filename) {
     int n_bytes_scn = tri_bvhs.size()*sizeof(Object);
     int n_bytes_bvh = scn_bvh_vec.size()*sizeof(BVHNode);
     int n_bytes_emt = emitters.size()*sizeof(Object *);
+    int n_bytes_mat = materials.size()*sizeof(Material);
 
     Object *scn;
     checkCudaErrors(cudaMallocManaged((void **)&scn, n_bytes_scn));
@@ -106,12 +115,17 @@ Scene create_scene(const char *filename) {
     BVH<Object> *obj;
     checkCudaErrors(cudaMallocManaged((void **)&obj, sizeof(BVH<Object>)));
     *obj = BVH<Object>(scn, tri_bvhs.size(), scn_bvh, scn_bvh_vec.size());
+
+    Material *mat;
+    checkCudaErrors(cudaMallocManaged((void **)&mat, n_bytes_mat));
+    checkCudaErrors(cudaMemcpy(mat, materials.data(), n_bytes_mat, cudaMemcpyHostToDevice));
     
     Object **emt;
     checkCudaErrors(cudaMallocManaged((void **)&emt, n_bytes_emt));
     checkCudaErrors(cudaMemcpy(emt, emitters.data(), n_bytes_emt, cudaMemcpyHostToDevice));
 
     converted_scene.geometry = obj;
+    converted_scene.materials = mat;
     converted_scene.emitters = emt;
     converted_scene.n_emitters = emitters.size();
     // Camera will be initialized in main

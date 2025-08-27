@@ -163,7 +163,7 @@ __global__ void d_render_persistent(int w, int h, glm::vec3 *out, Scene scene) {
     }
 }
 
-__global__ void d_normalize_color(int sx, int sy, int ns, glm::vec3 *out, RayData *queue) {
+__global__ void d_normalize_color(int sx, int sy, int ns, glm::vec3 *out) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     int j = threadIdx.y + blockIdx.y * blockDim.y;
     if (i >= sx || j >= sy) return;
@@ -173,6 +173,44 @@ __global__ void d_normalize_color(int sx, int sy, int ns, glm::vec3 *out, RayDat
     color /= (float)ns;
     color = glm::sqrt(color);
     saturate(color);
+}
+
+// For visualizing ray traversal statistics
+__global__ void d_traversal_color(int sx, int sy, int ns, float max, glm::vec3 *out) {
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    int j = threadIdx.y + blockIdx.y * blockDim.y;
+    if (i >= sx || j >= sy) return;
+    int pixel_index = j*sx + i;
+
+    glm::vec3& color = out[pixel_index];
+    color /= max;
+    color.g = 0.5f;
+    color.b = 0.5f;
+    saturate(color);
+
+    if (i == 0 && j == 0) printf("Max node count: %f\n", max/ns);
+}
+
+// For visualizing ray traversal statistics
+__global__ void d_intersection_color(int sx, int sy, int ns, float max, glm::vec3 *out) {
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    int j = threadIdx.y + blockIdx.y * blockDim.y;
+    if (i >= sx || j >= sy) return;
+    int pixel_index = j*sx + i;
+
+    glm::vec3& color = out[pixel_index];
+    color /= max;
+    saturate(color);
+
+    if (i == 0 && j == 0) printf("Max intersection count: %f\n", max/ns);
+}
+
+inline float max_val(glm::vec3 *arr, int size) {
+    float val = 0;
+    for (int i = 0; i < size; ++i) {
+        if (arr[i].x > val) val = arr[i].x;
+    }
+    return val;
 }
 
 void render_persistent(int sx, int sy, int ns, glm::vec3 *out, Scene scene) {
@@ -192,7 +230,12 @@ void render_persistent(int sx, int sy, int ns, glm::vec3 *out, Scene scene) {
         //d_render_persistent_debug<<<img_blocks, img_threads>>>(sx, sy, queue, out, scene);
         checkCudaErrors(cudaDeviceSynchronize());
     }
-    d_normalize_color<<<img_blocks, img_threads>>>(sx, sy, ns, out, queue);
+    float max = max_val(out, sx*sy);
+    #ifdef TRAVERSE_INFO
+    d_intersection_color<<<img_blocks, img_threads>>>(sx, sy, ns, max, out);
+    #else
+    d_normalize_color<<<img_blocks, img_threads>>>(sx, sy, ns, out);
+    #endif
     checkCudaErrors(cudaDeviceSynchronize());
 
     checkCudaErrors(cudaFree(queue));
